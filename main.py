@@ -21,8 +21,8 @@ try:
     )
     print('* loaded all the data from %s' % path_data)
 
-except:
-    pass
+except Exception as err:
+    print("!!!", err)
 
 #%% init openai client
 openai = OpenAI(
