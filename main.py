@@ -11,16 +11,19 @@ print('* loaded packages')
 
 
 # %% load data
-path_data = '/data/pubmed/metadata_36m.tsv'
+path_data = os.getenv('PATH_TO_36M_TSV')
+print('* loading something from %s' % path_data)
 df = pd.read_csv(
     path_data,
     sep='\t'
 )
+print('* loaded all the data from %s' % path_data)
 
 #%% init openai client
 openai = OpenAI(
     api_key=os.getenv('OPENAI_APIKEY')
 )
+print('* inited openai client')
 
 # %%
-print('d %s' % d)
+print('* done!')

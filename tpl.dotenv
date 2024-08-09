@@ -1,0 +1,3 @@
+OPENAI_APIKEY=
+
+PATH_TO_36M_TSV='/data/pubmed/metadata_36m.tsv'
