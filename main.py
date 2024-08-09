@@ -11,13 +11,18 @@ print('* loaded packages')
 
 
 # %% load data
-path_data = os.getenv('PATH_TO_36M_TSV')
-print('* loading something from %s' % path_data)
-df = pd.read_csv(
-    path_data,
-    sep='\t'
-)
-print('* loaded all the data from %s' % path_data)
+try:
+    path_data = os.getenv('PATH_TO_36M_TSV')
+
+    print('* loading something from %s' % path_data)
+    df = pd.read_csv(
+        path_data,
+        sep='\t'
+    )
+    print('* loaded all the data from %s' % path_data)
+
+except:
+    pass
 
 #%% init openai client
 openai = OpenAI(
