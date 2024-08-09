@@ -1,0 +1,2 @@
+# softname
+A script
