@@ -1,0 +1,13 @@
+训练：python ner.py --do_train True --do_eval True --do_test False --max_seq_length 256 --train_file ../preprocessed_data/BIO_train.txt --eval_file ../preprocessed_data/BIO_dev.txt --test_file ../preprocessed_data/BIO_test.txt 
+--train_batch_size 4 --eval_batch_size 4 --num_train_epochs 10 --do_lower_case --logging_steps 200 --need_birnn True --rnn_dim 256 --clean True --output_dir ../output
+
+测试（soft-metrics）： python ./evaluate_jianfu_original.py -lf ./merged_gold_pre.bio
+
+这个merged_gold_pre.bio的格式是：每一行 {token}\t{gold_label}\t{pre_label}\n，不同句子之间用\n分隔开
+{token}\t{gold_label}\t{pre_label}\n
+{token}\t{gold_label}\t{pre_label}\n
+{token}\t{gold_label}\t{pre_label}\n
+\n
+{token}\t{gold_label}\t{pre_label}\n
+{token}\t{gold_label}\t{pre_label}\n
+{token}\t{gold_label}\t{pre_label}\n
