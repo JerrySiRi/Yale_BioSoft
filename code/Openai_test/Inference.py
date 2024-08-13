@@ -57,11 +57,10 @@ if __name__ == "__main__":
     guidelines_name = "guidelines.txt"
     few_shots_name = "few_shots.txt"
 
-    with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
-        for line in file_txt:
-            print("ok")
    # 加载 .env 文件中的环境变量
     load_dotenv()
+
+
 
     # 现在可以使用 os.getenv() 或 os.environ 获取变量
     OPENAI_KEY = os.getenv('OPENAI_APIKEY')
