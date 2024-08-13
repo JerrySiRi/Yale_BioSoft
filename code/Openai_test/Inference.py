@@ -6,27 +6,6 @@ from dotenv import load_dotenv
 import pandas as pd
 from datasets import Dataset, DatasetDict
 
-
-# 加载 .env 文件中的环境变量
-load_dotenv()
-
-# 现在可以使用 os.getenv() 或 os.environ 获取变量
-OPENAI_KEY = os.getenv('OPENAI_APIKEY')
-path_data = os.getenv('PATH_TO_36M_TSV')
-
-path_data = '/data/pubmed/metadata_36m.tsv'
-
-try:
-    print('* loading something from %s' % path_data)
-    df = pd.read_csv(
-        path_data,
-        sep='\t'
-    )
-    print('* loaded all the data from %s' % path_data)
-except Exception as err:
-    print("!!!", err)
-
-
 # ----------------- openai_in-contenxt learning -------------------- # 
 
 
@@ -72,17 +51,36 @@ def Inference_based_on_text(text, OPENAI_KEY = None, guidelines=None, few_shots=
 
 
 
-
-
 if __name__ == "__main__":
+
     prompts_foler_path = "../../datasets/prompts"
     guidelines_name = "guidelines.txt"
     few_shots_name = "few_shots.txt"
+
+   # 加载 .env 文件中的环境变量
+    load_dotenv()
+
+    # 现在可以使用 os.getenv() 或 os.environ 获取变量
+    OPENAI_KEY = os.getenv('OPENAI_APIKEY')
+    path_data = os.getenv('PATH_TO_36M_TSV')
+
+    path_data = '/data/pubmed/metadata_36m.tsv'
+
+    try:
+        print('* loading something from %s' % path_data)
+        df = pd.read_csv(
+            path_data,
+            sep='\t'
+        )
+        print('* loaded all the data from %s' % path_data)
+    except Exception as err:
+        print("!!!", err)
 
 
     # ---------------------- 数据筛选 ------------------- # 
     # df是读出来的内容
     # 筛选abstract不是Nan的
+    print("* begin filtering")
     df_filtered = df.dropna(subset=["abstract"])
 
     df_infer = df_filtered[["pmid", "abstract"]]
@@ -93,6 +91,7 @@ if __name__ == "__main__":
     guidelines, few_shots = read_guidelines_shots(prompts_foler_path, guidelines_name, few_shots_name)
 
     # ---------------------  GPT-4o推理 ---------------------- # 
+    
     for id, text in zip(df_infer_8k["pmid"], df_infer_8k["abstract"]):
         current_data = dict()
         current_data["id"] = id
