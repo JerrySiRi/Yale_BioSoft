@@ -57,6 +57,9 @@ if __name__ == "__main__":
     guidelines_name = "guidelines.txt"
     few_shots_name = "few_shots.txt"
 
+    with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
+        for line in file_txt:
+            print("ok")
    # 加载 .env 文件中的环境变量
     load_dotenv()
 
@@ -91,7 +94,7 @@ if __name__ == "__main__":
     guidelines, few_shots = read_guidelines_shots(prompts_foler_path, guidelines_name, few_shots_name)
 
     # ---------------------  GPT-4o推理 ---------------------- # 
-    
+
     for id, text in zip(df_infer_8k["pmid"], df_infer_8k["abstract"]):
         current_data = dict()
         current_data["id"] = id
