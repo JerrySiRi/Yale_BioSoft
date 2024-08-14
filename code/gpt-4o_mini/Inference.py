@@ -28,8 +28,7 @@ def Inference_based_on_text(text, OPENAI_KEY = None, guidelines=None, few_shots=
     client = OpenAI(api_key = OPENAI_KEY)
     current_prompt = [
         {"role": "system", 
-        "content": """You are an experienced annotator with extensive knowledge in the field of biomedical informatics and data science, 
-                    particularly well-versed in the names of software used in this domain"""},
+        "content": """You are an experienced annotator with extensive knowledge in the field of biomedical informatics and data science, particularly well-versed in the names of software used in this domain"""},
 
         {"role": "user", 
         "content": f"""Given an abstract identity all software names from it by highlighting within <mark> and </mark> tags. 
