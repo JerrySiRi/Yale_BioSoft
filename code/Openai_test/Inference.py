@@ -83,14 +83,14 @@ if __name__ == "__main__":
     # ---------------------- 数据筛选 ------------------- # 
     # df是读出来的内容
     # 筛选abstract不是Nan的
-    print("* begin filtering")
+    print("* Begin filtering")
     df_filtered = df.dropna(subset=["abstract"])
 
     df_infer = df_filtered[["pmid", "abstract"]]
     df_infer_1k = df_infer.head(1024) 
     number = 1*1024
 
-    print("* finish filtering & select first 1024 examples")   
+    print("* Finish filtering & select first 1024 examples")   
 
     # df_infer_8 = df_infer.head(8)   
     data = []
@@ -108,14 +108,14 @@ if __name__ == "__main__":
         data.append(current_data)
         count += 1
         if count == 0.5*number:
-            print("* half of inference has finished")
+            print("* Half of inference has finished")
     print("* Finish inference")
 
     # ---------------- 上传到huggingface中 -------------- #
     
     
     HF_TOKEN = "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"
-    print("* huggingface token", HF_TOKEN)
+    print("* Huggingface token", HF_TOKEN)
     data = Dataset.from_dict({key: [d[key] for d in data] for key in data[0].keys()})
     dataset_dict = DatasetDict({
         'train': data,
