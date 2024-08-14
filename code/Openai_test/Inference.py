@@ -28,7 +28,8 @@ def Inference_based_on_text(text, OPENAI_KEY = None, guidelines=None, few_shots=
     client = OpenAI(api_key = OPENAI_KEY)
     current_prompt = [
         {"role": "system", 
-        "content": "You are a poetic assistant, skilled in explaining complex programming concepts with creative flair."},
+        "content": """You are an experienced annotator with extensive knowledge in the field of biomedical informatics and data science, 
+                    particularly well-versed in the names of software used in this domain"""},
 
         {"role": "user", 
         "content": f"""Given an abstract identity all software names from it by highlighting within <mark> and </mark> tags. 
@@ -86,22 +87,29 @@ if __name__ == "__main__":
     df_filtered = df.dropna(subset=["abstract"])
 
     df_infer = df_filtered[["pmid", "abstract"]]
-    df_infer_8k = df_infer.head(16*1024)    
+    df_infer_1k = df_infer.head(1024) 
+    number = 1*1024
+
+    print("* finish filtering & select first 1024 examples")   
 
     # df_infer_8 = df_infer.head(8)   
     data = []
     guidelines, few_shots = read_guidelines_shots(prompts_foler_path, guidelines_name, few_shots_name)
 
     # ---------------------  GPT-4o推理 ---------------------- # 
-
-    for id, text in zip(df_infer_8k["pmid"], df_infer_8k["abstract"]):
+    print("* Start inference")
+    count = 0
+    for id, text in zip(df_infer_1k["pmid"], df_infer_1k["abstract"]):
         current_data = dict()
         current_data["id"] = id
         answer, current_prompt = Inference_based_on_text(text,OPENAI_KEY=OPENAI_KEY, guidelines=guidelines, few_shots=few_shots)
         current_data["query"] = current_prompt
         current_data["answer"] = answer
         data.append(current_data)
-        
+        count += 1
+        if count == 0.5*number:
+            print("* half of inference has finished")
+    print("* Finish inference")
 
     # ---------------- 上传到huggingface中 -------------- #
     
@@ -120,7 +128,7 @@ if __name__ == "__main__":
     if not HF_TOKEN:
         raise ValueError("Please set your Hugging Face API token as an environment variable named 'HF_TOKEN'.")
 
-    dataset_dict.push_to_hub('YBXL/STN_4shots_16k', token=HF_TOKEN)
+    dataset_dict.push_to_hub('YBXL/STN_4shots_1k', token=HF_TOKEN)
 
 
 
