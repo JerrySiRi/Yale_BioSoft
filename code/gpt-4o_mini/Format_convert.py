@@ -1,3 +1,6 @@
+# --------------------- 把推理格式<mark> -> 转换成.ann格式，方便用data_preprocess的方法 ---------------- #  
+
+
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
