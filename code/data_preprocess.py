@@ -7,7 +7,6 @@ import pandas
 
 def convert_files_to_txt(folder_path, output_file):
 
-
     files = sorted(os.listdir(folder_path))
     txt_files = [f for f in files if f.endswith('.txt')]
 
@@ -98,7 +97,5 @@ def convert_files_to_txt(folder_path, output_file):
 
     
 
-
-
-
-convert_files_to_txt("../train_data", "../preprocessed_data")
+if __name__ == "__main__":
+    convert_files_to_txt("../train_data", "../preprocessed_data")
