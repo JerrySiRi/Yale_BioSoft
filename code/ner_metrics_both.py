@@ -10,8 +10,9 @@ y_pred = ['O', 'B-PER', 'O', 'B-ORG', 'B-ORG', 'I-ORG', 'O', 'B-PER', 'I-PER', '
 classifcation_report(tags_true=y_true, tags_pred=y_pred, mode="lenient") # for lenient match
 
 classifcation_report(tags_true=y_true, tags_pred=y_pred, mode="strict") # for strict match
-
 """
+
+
 
 TNE = "this_tag_does_not_exists"
 
