@@ -22,14 +22,19 @@ print('* created a local database if not exists')
 
 #%% load the data from 
 rs = cursor.execute('select * from paper_software_names').fetchall()
+# fetchall(): 获取查询的所有结果。
+# 将所有行的结果作为一个【列表】返回
+# 每一行是一个元组，包含了从数据库中检索的所有列数据。
 print('* found %s papers' % len(rs))
 
 ps = []
 
 for r in rs:
+    # 存进去的格式是 (pid, json.dumps(software_names))
+    # result = {'software': software_names_with_contexts}
+    # save_paper_software_names(paper['pmid'], result)
     j = json.loads(r[1])
-    
-    if len(j['software']) > 0:
+    if len(j['software']) > 0: # 本paper有stn，才加到结果列表中
         ps.append({
             'pmid': r[0],
             'software': j['software']

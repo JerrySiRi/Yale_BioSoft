@@ -13,19 +13,26 @@ if path_db is None:
 print("* OUTPUT_DATABASE=%s" % path_db)
 
 # create a local database if not exists
-conn = sqlite3.connect(path_db)
-c = conn.cursor()
-c.execute('''
+conn = sqlite3.connect(path_db) 
+# 和数据库的连接对象，是与SQLite数据库交互的桥梁，它管理着整个数据库连接的生命周期
+
+c = conn.cursor() # 创建游标
+# c.execute(...)：执行一个 SQL 命令，下面建立的db叫paper_software_namse
+
+c.execute(''' 
 CREATE TABLE IF NOT EXISTS paper_software_names (
     pid TEXT PRIMARY KEY,
     software TEXT
 )
 ''')
-conn.commit()
+# pid是TEXT类型，而且是主键（唯一性）primary key
+
+conn.commit() # 提交当前事务，将所有的更改保存到数据库文件中。
 print('* created a local database if not exists')
 
 
 
+# --- 把pid的software_names放入 --- # 
 def save_paper_software_names(pid, software_names):
     '''
     Save the extracted software names for a paper
@@ -34,18 +41,23 @@ def save_paper_software_names(pid, software_names):
     conn.commit()
     return software_names
 
-
+# --- 只提取一个软件名（如有），只是用来看之前是否提取过，是不是空的啦 --- #
 def load_paper_software_names(pid):
     '''
     Load the extracted software names for a paper
     '''
     c.execute('SELECT software FROM paper_software_names WHERE pid=?', (pid,))
     software_names = c.fetchone()
+    # c.fetchone() 从查询结果中获取【第一行数据（如果存在）】。
+    # fetchone() 方法返回一个包含结果的元组。
+    # 如果查询没有返回结果，fetchone() 会返回 None。
     if software_names is not None:
         return json.loads(software_names[0])
     else:
         return None
 
+
+# --- 删掉pid对应的那条数据 --- # 
 def delete_paper_software_names(pid):
     '''
     Delete the extracted software names for a paper

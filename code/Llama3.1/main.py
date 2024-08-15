@@ -3,16 +3,23 @@
 import json
 import time
 import os
-from tqdm import tqdm
-import pandas as pd
-import duckdb
-import pysbd
-from openai import OpenAI
 import sqlite3
 import db
+import duckdb
+# DuckDB 是一个嵌入式数据库，类似于 SQLite，但更专注于数据分析工作负载。它能够高效地处理数据，并且支持 SQL 查询。
+import pysbd
+from tqdm import tqdm
+import pandas as pd
+from openai import OpenAI
 from pprint import pprint
+# 名字来源于 “pretty-print”。
+# 它用于以一种更加可读的方式格式化和输出数据结构，尤其是复杂的嵌套数据结构（如字典、列表、元组等）。
+# --- 复杂输出结构时可用！
 
 from dotenv import load_dotenv
+
+
+# ----------------------- 加载.env文件中的信息 ------------------- #
 load_dotenv()
 print('* loaded configs')
 print('* OPENAI_API_BASE_URL=%s' % os.getenv('OPENAI_API_BASE_URL'))
@@ -24,6 +31,8 @@ print('* loaded all libraries')
 
 
 #%% load openai client
+
+# 现在用的本地的llama3.1，只不过名字没改
 base_url = os.getenv("OPENAI_API_BASE_URL", None)
 
 if base_url is None or base_url == '':
@@ -39,6 +48,7 @@ else:
     print('* loaded custom openai client at %s' % base_url)
 
 
+# 返回的是一个json对象，有"software"关键字
 TPL_PROMPT = """You are given a title and an abstract of an academic publication. Your task is to identify and extract the names of software mentioned in the abstract. Software names are typically proper nouns and may include specific tools, platforms, or libraries used in research. Please list the software names you find in the publication in a JSON object using a key "software". If you are unable to identify any software names, please return an empty list of "software". When identifying software names, please consider the following exclusion criteria:
 
 - Exclude general terms that are not specific software names (e.g., "software", "tool", "platform", "system").
@@ -53,13 +63,17 @@ Title: {title}
 Abstract: {abstract}
 """
 
+# 这个会比annotator要好！
 SYSTEM_ROLE = "You are an experienced software developer, data scientist, and researcher in biomedical fields, skilled in developing software using various techniques."
 
+# --- 调用model，进行inference --- #
 def extract(system_role, prompt_template, paper):
     '''
     Extract something from the abstract of a paper based on the given prompt template.
     '''
     try:
+        # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
+        # 传入的paper会给键值对
         prompt = prompt_template.format(**paper)
 
         completion = client.chat.completions.create(
@@ -85,25 +99,31 @@ def extract(system_role, prompt_template, paper):
         return None
 
 
+
+
 # create a segmenter for sentence splitting
+# 创建了一个【句子分割器（segmenter）】，用于将文本分割成独立的句子。
+# 使用了 pysbd 库，专门用于[句子边界检测]的库，特别适合处理多语言的复杂文本。
+# 通过识别常见的句子边界符号（如句号、问号、感叹号等）和处理语言特有的规则来准确地将文本分割成句子
+# clean 参数决定了分割器是否在分割前对文本进行清理。
+# - True，分割器会移除一些不必要的空白符或修复常见的格式问题。
+# - False，分割器会按照原始文本进行分割。
+
+
 sent_segmenter = pysbd.Segmenter(language="en", clean=False)
 
 
+# --- paper中把抽取出来的entity的所在句子给拿出来，为了后续做多模型的评判，看抽取出来的是否准确 --- # 
 def get_contexts(entities, paper):
     '''
     Get context for the identified entities.
-
     For example, the input entities may be: 
-
     ["MetaMap", "word2vec"],
-
     and the output entities should be:
-
     [
         {"name": "MetaMap", "context": "MetaMap is a valuable tool for processing biomedical texts to identify concepts."},
         {"name": "word2vec", "context": "For unsupervised training, the phrase and word2vec models used abstracts related to clinical decision support as input."}
     ]
-
     Basically, the context should be the text snippet from the abstract that contains the entity.
     '''
 
@@ -111,7 +131,7 @@ def get_contexts(entities, paper):
 
     # process the abstract first
     abstract = paper['abstract']
-    sents = sent_segmenter.segment(abstract)
+    sents = sent_segmenter.segment(abstract) # 分割器分割摘要
     
     for entity in entities:
         # search this entity in all sentences
@@ -122,10 +142,9 @@ def get_contexts(entities, paper):
             # the entity should be a substring of the sentence
             # but sometimes the entity may be in different forms
             # e.g., "MetaMap" vs. "metamap"
-            # so we use lower case for comparison
-            if entity.lower() in sent.lower():
+            # so we use 【lower case for comparison】
+            if entity.lower() in sent.lower(): # 字符串用in就可以！不用find来找啦
                 contexts.append(sent)
-
         ents.append({
             'name': entity,
             'contexts': contexts
@@ -134,6 +153,8 @@ def get_contexts(entities, paper):
     return ents
 
 
+
+# --- 单篇文章 抽取 & 保存到数据库 --- #
 def extract_and_save_to_db(paper, flag_force_update=False):
     '''
     Extract software names from the given paper and save the result to the database.
@@ -147,6 +168,7 @@ def extract_and_save_to_db(paper, flag_force_update=False):
     # check if the software names are already extracted
     result = db.load_paper_software_names(paper['pmid'])
 
+    # 如果这篇文章（pmid）已经有软件名了（之前提取过），flag=False时啥都不做，True时删掉重新提取这篇文章的软件名
     if result is not None:
         if flag_force_update:
             # delete the existing software names
@@ -169,6 +191,8 @@ def extract_and_save_to_db(paper, flag_force_update=False):
         try:
             software_names_with_contexts = get_contexts(tmp['software'], paper)
         except Exception as e:
+            # 可能model返回的格式不是字典 or 是字典，但是没有“software”这个键，导致上一句执行错误
+            # 【对model不按指示推理设置保险 -- 不会在没"software"这个键上报错】
             print(f'! error: {e}')
             print(f'! failed to get context for {tmp}')
             software_names_with_contexts = []
@@ -207,7 +231,7 @@ def demo_extract():
         pprint(entities_with_context)
 
 
-
+# --- 指定sql筛选逻辑 & 从pubmed数据库中抽取software name --- # 
 def extract_and_save_samples(
     sample_size=10, 
     pmid_filter='pmid > 34500000'
@@ -218,11 +242,14 @@ def extract_and_save_samples(
     print(f'* extracting software names of {sample_size} papers where {pmid_filter}')
     #%% load the data from 
     duck_conn = duckdb.connect()
+    # 这行代码调用了 duckdb 模块的 connect 方法，创建了一个【与DuckDB 数据库的连接】。
+    # 此连接对象允许你执行 SQL 查询、操作数据库表、插入或检索数据等。
 
     # load data
     path_data = os.getenv('PUBMED_DATA_TSV')
 
-    print('* loading data from %s (whole pubmed data is about 50G, it may take a few minutes)' % path_data)
+    print('* loading data from %s (whole pubmed data is about 60G, it may take a few minutes)' % path_data)
+    # 原来PubMed的csv文件，转化成duckdb数据库
     duck_conn.execute(f"""
         CREATE TABLE IF NOT EXISTS papers AS
         SELECT *
@@ -230,7 +257,10 @@ def extract_and_save_samples(
     """)
     print('* loaded data from %s' % path_data)
 
-    # make a small sample
+    # 【筛选逻辑，筛选生成dataframe！】
+    # 筛：不是空 + 不是空字符串(<>)
+    # 返：LIMIT {sample_size} 指定返回的最大行数，{sample_size} 是一个变量，表示要返回的样本数量。
+    # 转：fetch_df() 是 DuckDB 提供的一个方法，用于将 SQL 查询的结果直接转化为 Pandas DataFrame 对象，方便后续的数据分析和处理。
     df = duck_conn.execute(f"""
 SELECT * 
 FROM papers
@@ -244,6 +274,10 @@ LIMIT {sample_size}
 
 
     #%% parse the software names of the given df
+    # df.iterrows() ：用于逐行遍历 DataFrame。它返回一个生成器，每次迭代返回一个包含“行索引”和“行数据”的元组
+    # df.shape ：返回一个包含 DataFrame 【行数和列数的元组】。df.shape[0] 获取 DataFrame 的行数
+    # tqdm把df.iterrows()生成器（每次迭代返回两个值给i和row）包装到tqdm里边，并指定总长度total
+
     for i, row in tqdm(df.iterrows(), total=df.shape[0]):
         # create a new paper for extraction
         paper = {
@@ -262,14 +296,18 @@ LIMIT {sample_size}
 
 
 #%% main function
+
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(
         description='Extract software names from academic papers',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        # 帮助格式化器，它会显示命令行参数的默认值。
     )
+    # 位置参数，必须要给
     parser.add_argument('action', type=str, help='The action to perform: demo, extract', choices=['demo', 'extract'])
+    # 可选参数，使用--之后才给，也可以不给
     parser.add_argument('--sample_size', type=int, default=10, help='The number of samples to extract')
     parser.add_argument('--pmid_filter', type=str, default='pmid > 34500000', help='The filter to select papers')
 
