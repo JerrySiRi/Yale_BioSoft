@@ -17,6 +17,12 @@ from pprint import pprint
 # --- 复杂输出结构时可用！
 
 from dotenv import load_dotenv
+from datasets import Dataset, DatasetDict
+
+
+
+
+
 
 
 # ----------------------- 加载.env文件中的信息 ------------------- #
@@ -26,8 +32,10 @@ print('* OPENAI_API_BASE_URL=%s' % os.getenv('OPENAI_API_BASE_URL'))
 print('* OPENAI_API_MODEL=%s' % os.getenv('OPENAI_API_MODEL'))
 print('* PUBMED_DATA_TSV=%s' % os.getenv('PUBMED_DATA_TSV'))
 print('* OUTPUT_DATABASE=%s' % os.getenv('OUTPUT_DATABASE'))
+print('* HF_TOKEN=%s' % os.getenv('HF_TOKEN'))
 
 print('* loaded all libraries')
+
 
 
 #%% load openai client
@@ -48,15 +56,18 @@ else:
     print('* loaded custom openai client at %s' % base_url)
 
 
-# 返回的是一个json对象，有"software"关键字
-TPL_PROMPT = """You are given a title and an abstract of an academic publication. Your task is to identify and extract the names of software mentioned in the abstract. Software names are typically proper nouns and may include specific tools, platforms, or libraries used in research. Please list the software names you find in the publication in a JSON object using a key "software". If you are unable to identify any software names, please return an empty list of "software". When identifying software names, please consider the following exclusion criteria:
 
-- Exclude general terms that are not specific software names (e.g., "software", "tool", "platform", "system").
-- Exclude common programming languages (e.g., "Python", "Java", "R", "Julia", "Rust", "Golang", "PHP").
-- Exclude common web technologies (e.g., "HTML", "CSS", "JavaScript").
-- Exclude websites and cloud platforms (e.g., "GitHub", "Google Cloud", "Amazon Web Services").
+# ----------------------- 读取设计好的guidelines ----------------- # 
+guidelines = """"""
+few_shots = """"""
+with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
+    for line in file_txt:
+        guidelines += line
+with open("../../datasets/prompts/few_shots_Llama31.txt", 'r', encoding='utf-8') as file_txt:
+    for line in file_txt:
+        few_shots += line
 
-The publication details are as follows:
+TPL_PROMPT = """
 
 Title: {title}
      
@@ -64,7 +75,8 @@ Abstract: {abstract}
 """
 
 # 这个会比annotator要好！
-SYSTEM_ROLE = "You are an experienced software developer, data scientist, and researcher in biomedical fields, skilled in developing software using various techniques."
+SYSTEM_ROLE = "You are an experienced software developer, data scientist, and researcher in biomedical fields, skilled in developing software using various techniques and particularly well-versed in the names of software used in this domain."
+
 
 # --- 调用model，进行inference --- #
 def extract(system_role, prompt_template, paper):
@@ -75,12 +87,21 @@ def extract(system_role, prompt_template, paper):
         # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
         # 传入的paper会给键值对
         prompt = prompt_template.format(**paper)
+        # 返回的是一个json对象，有"software"关键字
+
+        Prompt_all = f"""You are given a title and an abstract of an academic publication. Your task is to identify and extract the names of software mentioned in the abstract. Software names are typically proper nouns and may include specific tools, platforms, or libraries used in research. Please list the software names you find in the publication in a JSON object using a key "software". If you are unable to identify any software names, please return an empty list of "software". When identifying software names, please consider the following exclusion criteria 
+                            Also, apply following \"Guidelines\" and refer following \"Gold Examples\" to help with accuracy \n"""\
+                            f"Guidelines: {guidelines} \n"\
+                            f"Gold Examples: {few_shots} \n"\
+                            "INPUT: {prompt} \n"\
+                            f"\n"\
+                            f"OUTPUT: \n"
 
         completion = client.chat.completions.create(
             model = os.getenv("OPENAI_API_MODEL"),
             messages=[
                 {"role": "system", "content": system_role},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": Prompt_all}
             ],
             response_format={"type": "json_object"},
             temperature=0,
@@ -199,7 +220,14 @@ def extract_and_save_to_db(paper, flag_force_update=False):
 
         result = {'software': software_names_with_contexts}
     
-    db.save_paper_software_names(paper['pmid'], result)
+    db.save_paper_software_names(paper['pmid'], paper["pubdate"], result)
+
+    current = dict()
+    current["pmid"] = paper['pmid']
+    current["pubdate"] = paper['pubdate']
+    current["software"] = result["software"]
+    return current
+
 
 
 def demo_extract():
@@ -231,15 +259,41 @@ def demo_extract():
         pprint(entities_with_context)
 
 
+
+# --- 抽取结果上传huggingface --- # 
+def upload_hugging_face(data, start_year, end_year, each_year_sample_size):
+
+    HF_TOKEN=os.getenv("HF_TOKEN")
+    print("* Huggingface token", HF_TOKEN)
+    # data是一个列表形式，每一个元素都是字典
+    data = Dataset.from_dict({key: [d[key] for d in data] for key in data[0].keys()})
+    dataset_dict = DatasetDict({
+        'train': data,
+        'valid': data,
+        'test': data
+    })
+
+    # 上传数据集到 Hugging Face
+    # 设置Hugging Face API Token，确保已登录Hugging Face并生成API密钥
+    if not HF_TOKEN:
+        raise ValueError("Please set your Hugging Face API token as an environment variable named 'HF_TOKEN'.")
+
+    dataset_dict.push_to_hub(f'YBXL/SWN_LLama3.1_{start_year}_{end_year}_{each_year_sample_size}', token=HF_TOKEN)
+
+
+
+
 # --- 指定sql筛选逻辑 & 从pubmed数据库中抽取software name --- # 
 def extract_and_save_samples(
     sample_size=10, 
-    pmid_filter='pmid > 34500000'
+    pmid_filter='1=1',
+    start_year = 2010,
+    end_year = 2023,
 ):
     '''
     Extract software names from all papers in the database.
     '''
-    print(f'* extracting software names of {sample_size} papers where {pmid_filter}')
+    # print(f'* extracting software names of {sample_size} papers where {pmid_filter}')
     #%% load the data from 
     duck_conn = duckdb.connect()
     # 这行代码调用了 duckdb 模块的 connect 方法，创建了一个【与DuckDB 数据库的连接】。
@@ -261,16 +315,43 @@ def extract_and_save_samples(
     # 筛：不是空 + 不是空字符串(<>)
     # 返：LIMIT {sample_size} 指定返回的最大行数，{sample_size} 是一个变量，表示要返回的样本数量。
     # 转：fetch_df() 是 DuckDB 提供的一个方法，用于将 SQL 查询的结果直接转化为 Pandas DataFrame 对象，方便后续的数据分析和处理。
+
+
+    # sample_size = 总量LIMIT 
     df = duck_conn.execute(f"""
 SELECT * 
 FROM papers
-WHERE abstract IS NOT NULL AND abstract <> ''
+WHERE abstract IS NOT NULL 
+    AND abstract <> ''
     AND {pmid_filter}
-ORDER BY RANDOM()
+    AND pubdate BETWEEN {start_year} AND {end_year}
+ORDER BY pubdate, RANDOM()
 LIMIT {sample_size}
     """).fetch_df()
 
-    print('* loaded sample data %s' % df.shape[0])
+
+    # sample_size = 每年的LIMI
+    # 按照pubdate设置分区，再在分区中显示sample_size
+    df_each_year = duck_conn.execute(f"""
+WITH year_partition AS (
+    SELECT *, 
+           ROW_NUMBER() OVER (PARTITION BY pubdate 
+                                ORDER BY RANDOM()) AS rn
+    FROM papers
+    WHERE abstract IS NOT NULL 
+        AND abstract <> ''
+        AND {pmid_filter}
+        AND pubdate BETWEEN {start_year} AND {end_year}
+)
+SELECT *
+FROM year_partition
+WHERE rn <= {sample_size}
+ORDER BY pubdate ASC;""").fetch_df()
+
+    # 先按照pubdate排序，再random排序
+    # print("* columns of df", df_each_year.columns)
+    # print(df_each_year.head(5)["pubdate"])
+    print('* loaded sample data %s' % df_each_year.shape[0])
 
 
     #%% parse the software names of the given df
@@ -278,19 +359,23 @@ LIMIT {sample_size}
     # df.shape ：返回一个包含 DataFrame 【行数和列数的元组】。df.shape[0] 获取 DataFrame 的行数
     # tqdm把df.iterrows()生成器（每次迭代返回两个值给i和row）包装到tqdm里边，并指定总长度total
 
-    for i, row in tqdm(df.iterrows(), total=df.shape[0]):
+    data = []
+    for i, row in tqdm(df_each_year.iterrows(), total=df_each_year.shape[0]):
         # create a new paper for extraction
         paper = {
             'pmid': row['pmid'],
             'title': row['title'],
+            'pubdate': row["pubdate"],
             'abstract': row['abstract']
         }
         
-        extract_and_save_to_db(paper)
+        current = extract_and_save_to_db(paper)
+        data.append(current)
 
         # in case sending too many requests
         # pause a few seconds every 100 requests
         if i % 100 == 0: time.sleep(1)
+    upload_hugging_face(data, start_year=start_year, end_year=end_year, each_year_sample_size=sample_size)
 
     print(f'* done! all papers are processed and saved into {db.path_db}')
 
@@ -308,8 +393,12 @@ if __name__ == '__main__':
     # 位置参数，必须要给
     parser.add_argument('action', type=str, help='The action to perform: demo, extract', choices=['demo', 'extract'])
     # 可选参数，使用--之后才给，也可以不给
-    parser.add_argument('--sample_size', type=int, default=10, help='The number of samples to extract')
-    parser.add_argument('--pmid_filter', type=str, default='pmid > 34500000', help='The filter to select papers')
+    parser.add_argument('--each_year_sample_size', type=int, default=10, help='The number of samples to extract')
+    parser.add_argument('--pmid_filter', type=str, default='1=1', help='Other specific filter instrction')
+    # 永真式，不需要就没用，需要再改
+    parser.add_argument('--start_year', type=str, default='2009', help='The start year of papers to extract')
+    parser.add_argument('--end_year', type=str, default='2023', help='The end year of papers to extract')
+    
 
     args = parser.parse_args()
 
@@ -318,8 +407,10 @@ if __name__ == '__main__':
 
     elif args.action == 'extract':
         extract_and_save_samples(
-            args.sample_size,
-            args.pmid_filter
+            sample_size = args.each_year_sample_size,
+            pmid_filter = args.pmid_filter,
+            start_year = args.start_year,
+            end_year = args.end_year
         )
 
     else:

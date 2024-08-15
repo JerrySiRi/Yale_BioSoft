@@ -22,6 +22,7 @@ c = conn.cursor() # 创建游标
 c.execute(''' 
 CREATE TABLE IF NOT EXISTS paper_software_names (
     pid TEXT PRIMARY KEY,
+    pubdate TEXT,
     software TEXT
 )
 ''')
@@ -33,11 +34,11 @@ print('* created a local database if not exists')
 
 
 # --- 把pid的software_names放入 --- # 
-def save_paper_software_names(pid, software_names):
+def save_paper_software_names(pid, pubdate, software_names):
     '''
     Save the extracted software names for a paper
     '''
-    c.execute('INSERT INTO paper_software_names VALUES (?, ?)', (pid, json.dumps(software_names)))
+    c.execute('INSERT INTO paper_software_names VALUES (?, ?, ?)', (pid, pubdate, json.dumps(software_names)))
     conn.commit()
     return software_names
 

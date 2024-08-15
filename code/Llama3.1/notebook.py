@@ -33,10 +33,11 @@ for r in rs:
     # 存进去的格式是 (pid, json.dumps(software_names))
     # result = {'software': software_names_with_contexts}
     # save_paper_software_names(paper['pmid'], result)
-    j = json.loads(r[1])
+    j = json.loads(r[2])
     if len(j['software']) > 0: # 本paper有stn，才加到结果列表中
         ps.append({
             'pmid': r[0],
+            'pubdate': r[1],
             'software': j['software']
         })
 print('* found %s papers with software names' % len(ps))
