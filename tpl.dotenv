@@ -1,3 +1,24 @@
 OPENAI_APIKEY=
 
 PATH_TO_36M_TSV='/data/pubmed/metadata_36m.tsv'
+
+# put your API key here
+OPENAI_API_KEY=
+
+# openai base_url for using local service
+# to avoid conflict, use a different name from the typeical name
+# the OPENAI_BASE_URL will be directly loaded from openai package
+# by default, leave this empty to use the official openai api
+# if using local ollama, you can change it to http://localhost:11434/v1/ 
+OPENAI_API_BASE_URL=
+
+# decide which model to use
+# for default official openai, use gpt-4o-mini
+# for local ollama, you can change it to llama3.1 or others
+OPENAI_API_MODEL=gpt-4o-mini
+
+# the input pubmed data tsv file
+PUBMED_DATA_TSV=/data/pubmed/metadata_36m.tsv
+
+# the output database for saving all software names
+OUTPUT_DATABASE=./software_names.db

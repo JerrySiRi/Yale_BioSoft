@@ -47,3 +47,8 @@ typing_extensions==4.12.2
 tzdata==2024.1
 unsloth==2024.8
 wcwidth==0.2.13
+openai
+python-dotenv
+tqdm
+duckdb
+pysbd
