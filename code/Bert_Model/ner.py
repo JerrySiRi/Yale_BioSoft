@@ -20,9 +20,9 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from tensorboardX import SummaryWriter
 
-from utils import NerProcessor, convert_examples_to_features, get_Dataset
+from code.Bert_Model.utils import NerProcessor, convert_examples_to_features, get_Dataset
 # from models import BERT_BiLSTM_CRF
-import conlleval
+import code.Bert_Model.conlleval as conlleval
 
 # from transformers import (WEIGHTS_NAME, BertConfig, BertTokenizer)
 from transformers import AdamW, get_linear_schedule_with_warmup

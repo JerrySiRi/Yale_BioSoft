@@ -21,4 +21,4 @@ if __name__ == "__main__":
 
     for initial_text in txt_files:
         with open(initial_text, "w", encoding="utf-8") as x_data: # Use writelines to write list
-            
+            pass

@@ -98,4 +98,4 @@ def convert_files_to_txt(folder_path, output_file):
     
 
 if __name__ == "__main__":
-    convert_files_to_txt("../train_data", "../preprocessed_data")
+    convert_files_to_txt("../../train_data", "../../preprocessed_data")
