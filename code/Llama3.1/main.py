@@ -23,8 +23,6 @@ from datasets import Dataset, DatasetDict
 
 
 
-
-
 # ----------------------- 加载.env文件中的信息 ------------------- #
 load_dotenv()
 print('* loaded configs')
@@ -86,16 +84,19 @@ def extract(system_role, prompt_template, paper):
     try:
         # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
         # 传入的paper会给键值对
+        # 【改】把原来的prompt加到了abstract里边
+        paper["abstract"] = paper["title"] + paper["abstract"]
         prompt = prompt_template.format(**paper)
+
         # 返回的是一个json对象，有"software"关键字
 
-        Prompt_all = f"""You are given a title and an abstract of an academic publication. Your task is to identify and extract the names of software mentioned in the abstract. Software names are typically proper nouns and may include specific tools, platforms, or libraries used in research. Please list the software names you find in the publication in a JSON object using a key "software". If you are unable to identify any software names, please return an empty list of "software". When identifying software names, please consider the following exclusion criteria 
+        Prompt_all = f"""# You are given a title and an abstract of an academic publication. Your task is to identify and extract the names of software mentioned in the abstract. Software names are typically proper nouns and may include specific tools, platforms, or libraries used in research. Please list the software names you find in the publication in a JSON object using a key "software". If you are unable to identify any software names, please return an empty list of "software". When identifying software names, please consider the following exclusion criteria 
                             Also, apply following \"Guidelines\" and refer following \"Gold Examples\" to help with accuracy \n"""\
-                            f"Guidelines: {guidelines} \n"\
-                            f"Gold Examples: {few_shots} \n"\
-                            "INPUT: {prompt} \n"\
+                            f"# Guidelines: {guidelines} \n"\
+                            f"# Gold Examples: {few_shots} \n"\
+                            f"# INPUT: {prompt} \n"\
                             f"\n"\
-                            f"OUTPUT: \n"
+                            f"# OUTPUT: \n"
 
         completion = client.chat.completions.create(
             model = os.getenv("OPENAI_API_MODEL"),
@@ -153,23 +154,26 @@ def get_contexts(entities, paper):
     # process the abstract first
     abstract = paper['abstract']
     sents = sent_segmenter.segment(abstract) # 分割器分割摘要
-    
     for entity in entities:
         # search this entity in all sentences
         # this entity may appear in multiple sentences
         contexts = []
+        
         for sent in sents:
 
             # the entity should be a substring of the sentence
             # but sometimes the entity may be in different forms
             # e.g., "MetaMap" vs. "metamap"
             # so we use 【lower case for comparison】
-            if entity.lower() in sent.lower(): # 字符串用in就可以！不用find来找啦
+            no_spaces_sent = sent.lower().replace(" ", "")
+            no_spaces_entity = entity.lower().replace(" ","")
+            if no_spaces_entity in no_spaces_sent: # 字符串用in就可以！不用find来找啦
                 contexts.append(sent)
-        ents.append({
-            'name': entity,
-            'contexts': contexts
-        })
+        if len(contexts) != 0:
+            ents.append({
+                'name': entity,
+                'contexts': contexts
+            })
                 
     return ents
 
@@ -234,7 +238,8 @@ def demo_extract():
     '''
     Run a demo to extract software names from the sample paper.
     '''
-    sample_paper = {
+    # 问题：漏掉了title的抽取，应该把title也放到abstract里边
+    sample_paper_initial = {
         "pmid": "35613942",
         "title": "A Systematic Approach to Configuring MetaMap for Optimal Performance",
         "abstract": """Background: MetaMap is a valuable tool for processing biomedical texts to identify concepts. Although MetaMap is highly configurative, configuration decisions are not straightforward.
@@ -248,13 +253,26 @@ def demo_extract():
     Conclusion: We demonstrated a systematic approach that provides objective and accurate evidence guiding MetaMap configurations for optimizing performance. Combining objective evidence and the current practice of using principles, experience, and intuitions outperforms a single strategy in MetaMap configurations. Our methodology, reference codes, measurements, results, and workflow are valuable references for optimizing and configuring MetaMap.
     """
     }
-    ret = extract(SYSTEM_ROLE, TPL_PROMPT, sample_paper)
+    sample_paper_gold = {
+        "pmid": "000000",
+        "title":"i - ADHoRe 2.0 : an improved tool to detect degenerated genomic homology using genomic profiles .",
+        "abstract":
+    """ 
+SUMMARY : i - ADHoRe is a software tool that combines gene content and gene order information of homologous genomic segments into profiles to detect highly degenerated homology relations within and between genomes .
+The new version offers , besides a significant increase in performance , several optimizations to the algorithm , most importantly to the profile alignment routine .
+As a result , the annotations of multiple genomes , or parts thereof , can be fed simultaneously into the program , after which it will report all regions of homology , both within and between genomes .
+AVAILABILITY : The i - ADHoRe 2.0 package contains the C + + source code for the main program as well as various Perl scripts and a fully documented Perl API to facilitate post - processing .
+The software runs on any Linux - or - UNIX based platform .
+The package is freely available for academic users and can be downloaded from http : / / bioinformatics.psb.ugent.be / 
+    """
+    }
+    ret = extract(SYSTEM_ROLE, TPL_PROMPT, sample_paper_initial)
     print("* extracted software names:", ret)
 
     if ret is None:
         pass
     else:
-        entities_with_context = get_contexts(ret['software'], sample_paper)
+        entities_with_context = get_contexts(ret['software'], sample_paper_initial)
         print('* entities with context:')
         pprint(entities_with_context)
 
