@@ -1,9 +1,12 @@
+def find_sublist(main_list, sub_list):
+    sub_len = len(sub_list)
+    for i in range(len(main_list) - sub_len + 1):
+        if main_list[i:i + sub_len] == sub_list:
+            return i, i+sub_len-1
+    return -1  # 如果没有找到子列表，返回 -1
 
-sub = "i-ADHoRe 2.0"
+main_list = [1, 2, 3, 4, 5, 6]
+sub_list = [1,2,3,4]
 
-par = """'AVAILABILITY : The i - ADHoRe 2.0 package contains the C + + '
-               'source code for the main program as well as various Perl '
-               'scripts and a fully documented Perl API to facilitate post - '
-               'processing .\n'"""
-
-print(sub.lower() in par.lower())
+first, end = find_sublist(main_list, sub_list)
+print(first, end)

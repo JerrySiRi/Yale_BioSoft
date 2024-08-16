@@ -304,14 +304,14 @@ def upload_hugging_face(data, start_year, end_year, each_year_sample_size):
     dataset_dict.push_to_hub(f'YBXL/SWN_LLama3.1_{start_year}_{end_year}_{each_year_sample_size}', token=HF_TOKEN)
 
 
+# --- 总抽取函数 --- # 
 
-
-# --- 指定sql筛选逻辑 & 从pubmed数据库中抽取software name --- # 
 def extract_and_save_samples(
     sample_size=10, 
     pmid_filter='1=1',
     start_year = 2010,
     end_year = 2023,
+    main_run = True,
 ):
     '''
     Extract software names from all papers in the database.
@@ -334,47 +334,48 @@ def extract_and_save_samples(
     """)
     print('* loaded data from %s' % path_data)
 
-    # 【筛选逻辑，筛选生成dataframe！】
-    # 筛：不是空 + 不是空字符串(<>)
-    # 返：LIMIT {sample_size} 指定返回的最大行数，{sample_size} 是一个变量，表示要返回的样本数量。
-    # 转：fetch_df() 是 DuckDB 提供的一个方法，用于将 SQL 查询的结果直接转化为 Pandas DataFrame 对象，方便后续的数据分析和处理。
-
-
-    # sample_size = 总量LIMIT 
-    df = duck_conn.execute(f"""
-SELECT * 
-FROM papers
-WHERE abstract IS NOT NULL 
-    AND abstract <> ''
-    AND {pmid_filter}
-    AND pubdate BETWEEN {start_year} AND {end_year}
-ORDER BY pubdate, RANDOM()
-LIMIT {sample_size}
-    """).fetch_df()
-
-
+    # ---------- 筛选逻辑，筛选生成dataframe --------- # 
+    
     # sample_size = 每年的LIMI
     # 按照pubdate设置分区，再在分区中显示sample_size
-    df_each_year = duck_conn.execute(f"""
-WITH year_partition AS (
-    SELECT *, 
-           ROW_NUMBER() OVER (PARTITION BY pubdate 
-                                ORDER BY RANDOM()) AS rn
+    if main_run == True:
+        df = duck_conn.execute(f"""
+    WITH year_partition AS (
+        SELECT *, 
+            ROW_NUMBER() OVER (PARTITION BY pubdate 
+                                    ORDER BY RANDOM()) AS rn
+        FROM papers
+        WHERE abstract IS NOT NULL 
+            AND abstract <> ''
+            AND {pmid_filter}
+            AND pubdate BETWEEN {start_year} AND {end_year}
+    )
+    SELECT *
+    FROM year_partition
+    WHERE rn <= {sample_size}
+    ORDER BY pubdate ASC;""").fetch_df()
+    # 先按照pubdate排序，再random排序
+
+
+    else:
+        # sample_size = 总量LIMIT 
+        df = duck_conn.execute(f"""
+    SELECT * 
     FROM papers
     WHERE abstract IS NOT NULL 
         AND abstract <> ''
         AND {pmid_filter}
         AND pubdate BETWEEN {start_year} AND {end_year}
-)
-SELECT *
-FROM year_partition
-WHERE rn <= {sample_size}
-ORDER BY pubdate ASC;""").fetch_df()
+    ORDER BY pubdate, RANDOM()
+    LIMIT {sample_size}
+        """).fetch_df()
+        # 筛：不是空 + 不是空字符串(<>)
+        # 返：LIMIT {sample_size} 指定返回的最大行数，{sample_size} 是一个变量，表示要返回的样本数量。
+        # 转：fetch_df() 是 DuckDB 提供的一个方法，用于将 SQL 查询的结果直接转化为 Pandas DataFrame 对象，方便后续的数据分析和处理。
 
-    # 先按照pubdate排序，再random排序
-    # print("* columns of df", df_each_year.columns)
-    # print(df_each_year.head(5)["pubdate"])
-    print('* loaded sample data %s' % df_each_year.shape[0])
+    
+
+    print('* loaded sample data %s' % df.shape[0])
 
 
     #%% parse the software names of the given df
@@ -383,10 +384,10 @@ ORDER BY pubdate ASC;""").fetch_df()
     # tqdm把df.iterrows()生成器（每次迭代返回两个值给i和row）包装到tqdm里边，并指定总长度total
 
     data = []
-    total = df_each_year.shape[0]
+    total = df.shape[0]
     halfway = total//2
     count = 0
-    for i, row in tqdm(df_each_year.iterrows(), total=total):
+    for i, row in tqdm(df.iterrows(), total=total):
         count += 1
         # create a new paper for extraction
         paper = {
