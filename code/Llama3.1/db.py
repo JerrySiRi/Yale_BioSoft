@@ -1,35 +1,41 @@
 import os
 import json
 import sqlite3
-
+from llama_infer import *
 from dotenv import load_dotenv
 load_dotenv()
 
+
 # get the path of the database
-path_db = os.getenv('OUTPUT_DATABASE', None)
-if path_db is None:
-    raise Exception('OUTPUT_DATABASE is not set in .env file')
+def create_db(start_year, end_year, sample_size):
+    global path_db
+    path_db = os.getenv('OUTPUT_DATABASE', None)
+    path_db = path_db + f"_{start_year}_{end_year}_{sample_size}" + ".db"
+    if path_db is None:
+        raise Exception('OUTPUT_DATABASE is not set in .env file')
 
-print("* OUTPUT_DATABASE=%s" % path_db)
+    print("* OUTPUT_DATABASE=%s" % path_db)
+    # create a local database if not exists
+    global conn
+    global c
+    conn = sqlite3.connect(path_db) 
+    # 和数据库的连接对象，是与SQLite数据库交互的桥梁，它管理着整个数据库连接的生命周期
 
-# create a local database if not exists
-conn = sqlite3.connect(path_db) 
-# 和数据库的连接对象，是与SQLite数据库交互的桥梁，它管理着整个数据库连接的生命周期
+    c = conn.cursor() # 创建游标
+    # c.execute(...)：执行一个 SQL 命令，下面建立的db叫paper_software_namse
 
-c = conn.cursor() # 创建游标
-# c.execute(...)：执行一个 SQL 命令，下面建立的db叫paper_software_namse
+    c.execute(''' 
+    CREATE TABLE IF NOT EXISTS paper_software_names (
+        pid TEXT PRIMARY KEY,
+        pubdate TEXT,
+        software TEXT
+    )
+    ''')
+    # pid是TEXT类型，而且是主键（唯一性）primary key
 
-c.execute(''' 
-CREATE TABLE IF NOT EXISTS paper_software_names (
-    pid TEXT PRIMARY KEY,
-    pubdate TEXT,
-    software TEXT
-)
-''')
-# pid是TEXT类型，而且是主键（唯一性）primary key
+    conn.commit() # 提交当前事务，将所有的更改保存到数据库文件中。
+    print('* created a local database if not exists')
 
-conn.commit() # 提交当前事务，将所有的更改保存到数据库文件中。
-print('* created a local database if not exists')
 
 
 
@@ -66,3 +72,6 @@ def delete_paper_software_names(pid):
     c.execute('DELETE FROM paper_software_names WHERE pid=?', (pid,))
     conn.commit()
     return pid
+
+if __name__ == "__main__":
+    pass

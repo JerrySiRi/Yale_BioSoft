@@ -6,6 +6,7 @@ import os
 import sys
 import sqlite3
 import db
+from db import *
 import duckdb
 # DuckDB 是一个嵌入式数据库，类似于 SQLite，但更专注于数据分析工作负载。它能够高效地处理数据，并且支持 SQL 查询。
 import pysbd
@@ -385,7 +386,7 @@ def extract_and_save_samples(
 
     data = []
     total = df.shape[0]
-    halfway = total//2
+    one_third_point = total//3
     count = 0
     for i, row in tqdm(df.iterrows(), total=total):
         count += 1
@@ -399,9 +400,12 @@ def extract_and_save_samples(
         
         current = extract_and_save_to_db(paper)
         data.append(current)
-        if count >= halfway and count < halfway + 1:
+        if count >= one_third_point and count < one_third_point + 1:
             send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_in each year", \
-                       "Inference reached halfway point!")
+                       "Inference reached first one_third_point!")
+        elif count >= 2*one_third_point and count < 2*one_third_point + 1:
+            send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_in each year", \
+                       "Inference reached second one_third_point!")
 
         # in case sending too many requests
         # pause a few seconds every 100 requests
@@ -436,10 +440,15 @@ if __name__ == '__main__':
     
 
     args = parser.parse_args()
+    
+    START_YEAR = args.start_year
+    END_YEAR = args.end_year
+    SAMPLE_SIZE = args.each_year_sample_size
+    # 创建有年份的数据库名
+    create_db(START_YEAR, END_YEAR, SAMPLE_SIZE)
 
     if args.action == 'demo':
         demo_extract()
-
     elif args.action == 'extract':
         extract_and_save_samples(
             sample_size = args.each_year_sample_size,
