@@ -399,7 +399,8 @@ ORDER BY pubdate ASC;""").fetch_df()
         current = extract_and_save_to_db(paper)
         data.append(current)
         if count >= halfway and count < halfway + 1:
-            send_email("Llama 3.1 Inference Progress", "Inference reached halfway point!")
+            send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_in each year", \
+                       "Inference reached halfway point!")
 
         # in case sending too many requests
         # pause a few seconds every 100 requests
@@ -407,7 +408,7 @@ ORDER BY pubdate ASC;""").fetch_df()
         if i % 100 == 0: time.sleep(1)
 
     upload_hugging_face(data, start_year=start_year, end_year=end_year, each_year_sample_size=sample_size)
-    send_email("Llama 3.1 Inference Progress", \
+    send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_in each year ", \
                f"Inference finished and has been uploaded to 'YBXL/SWN_LLama3.1_{start_year}_{end_year}_{sample_size}'")
 
     print(f'* done! all papers are processed and saved into {db.path_db}')
