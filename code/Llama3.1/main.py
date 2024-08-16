@@ -3,6 +3,7 @@
 import json
 import time
 import os
+import sys
 import sqlite3
 import db
 import duckdb
@@ -23,6 +24,7 @@ from datasets import Dataset, DatasetDict
 
 
 
+
 # ----------------------- 加载.env文件中的信息 ------------------- #
 load_dotenv()
 print('* loaded configs')
@@ -31,7 +33,10 @@ print('* OPENAI_API_MODEL=%s' % os.getenv('OPENAI_API_MODEL'))
 print('* PUBMED_DATA_TSV=%s' % os.getenv('PUBMED_DATA_TSV'))
 print('* OUTPUT_DATABASE=%s' % os.getenv('OUTPUT_DATABASE'))
 print('* HF_TOKEN=%s' % os.getenv('HF_TOKEN'))
-
+print('* PYTHONPATH=%s' % os.getenv('PYTHONPATH'))
+EMAIL_FOLDER = os.getenv('EMAIL_FOLDER')
+sys.path.append(EMAIL_FOLDER)
+from Email_senting import send_email
 print('* loaded all libraries')
 
 
@@ -378,7 +383,11 @@ ORDER BY pubdate ASC;""").fetch_df()
     # tqdm把df.iterrows()生成器（每次迭代返回两个值给i和row）包装到tqdm里边，并指定总长度total
 
     data = []
-    for i, row in tqdm(df_each_year.iterrows(), total=df_each_year.shape[0]):
+    total = df_each_year.shape[0]
+    halfway = total//2
+    count = 0
+    for i, row in tqdm(df_each_year.iterrows(), total=total):
+        count += 1
         # create a new paper for extraction
         paper = {
             'pmid': row['pmid'],
@@ -389,11 +398,17 @@ ORDER BY pubdate ASC;""").fetch_df()
         
         current = extract_and_save_to_db(paper)
         data.append(current)
+        if count >= halfway and count < halfway + 1:
+            send_email("Llama 3.1 Inference Progress", "Inference reached halfway point!")
 
         # in case sending too many requests
         # pause a few seconds every 100 requests
+        # 使用openai api的时，为了防止请求速度过快而设置的sleep
         if i % 100 == 0: time.sleep(1)
+
     upload_hugging_face(data, start_year=start_year, end_year=end_year, each_year_sample_size=sample_size)
+    send_email("Llama 3.1 Inference Progress", \
+               f"Inference finished and has been uploaded to 'YBXL/SWN_LLama3.1_{start_year}_{end_year}_{sample_size}'")
 
     print(f'* done! all papers are processed and saved into {db.path_db}')
 

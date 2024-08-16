@@ -10,9 +10,10 @@ password = os.getenv('Email_Password')
 # 设置SMTP服务器的配置
 smtp_server = 'smtp.gmail.com'
 smtp_port = 587
-sender_email = 'jerrysiri.colab@gmail.com'  # 你的 Gmail 地址
-sender_password = password       # 你的 Gmail 密码（或应用密码）
+sender_email = 'jerrysiri.xcdh@gmail.com'  # 你的 Gmail 地址
+sender_password = password       # 必须开启2FA验证 + 使用应用密码
 receiver_email = 'rui.shi@yale.edu'  # 收件人地址
+
 
 # 创建发送邮件的函数
 def send_email(subject, body):
@@ -20,10 +21,10 @@ def send_email(subject, body):
     message = MIMEMultipart()
     message['From'] = sender_email
     message['To'] = receiver_email
-    message['Subject'] = subject
+    message['Subject'] = subject # 邮件主题
 
     # 添加邮件正文
-    message.attach(MIMEText(body, 'plain'))
+    message.attach(MIMEText(body, 'plain')) # body是邮件内容
 
     # 连接到SMTP服务器并发送邮件
     try:
@@ -36,6 +37,7 @@ def send_email(subject, body):
         print(f"Failed to send email: {e}")
     finally:
         server.quit()
+
 
 # 示例：在程序运行过程中发送进度更新
 def your_program():
@@ -67,5 +69,8 @@ def your_program():
     print(step)
     send_email("Program Progress Update", step)
 
-# 运行程序
-your_program()
+
+
+if __name__ == "__main__":
+    # 运行程序
+    your_program()
