@@ -39,8 +39,6 @@ def convert_files_to_txt(folder_path, output_file):
                 for line in file_txt:
                     content = line.strip().split(" ")
                     txt_content.extend(content)
-                
-                
                 cur_index = 0
                 for item in txt_content:
                     txt_with_index_content.append((cur_index, item))
