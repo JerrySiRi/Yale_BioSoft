@@ -18,6 +18,7 @@ from llama_infer import *
 # -- 加入gpt-4o的infer模块
 load_dotenv()
 gpt_infer_path = os.getenv('GPT_infer_path')
+OPENAI_APIKEY = os.getenv("OPENAI_APIKEY")
 sys.path.append(gpt_infer_path)
 from Inference_pubmed import *
 
@@ -29,43 +30,54 @@ from Inference_pubmed import *
 # 不做删除，直接占位，之后给成O，保持和ann处理之后的长度一致！
 
 def process_special_token(orignial_list):
-    new_list = deepcopy(orignial_list)
+    """
+    处理gpt/llama3.1的输出，保持原有text不变
+    input: [[],[],[]]
+    TODO: 如果最里边的[]。两边加空格：-,/。左边加空格：!,+。拆开：（）
+    output: 直接在原列表上修改
+    """
+    for entity in orignial_list:
+        # 每一个item是一个列表
+        dup_entity = deepcopy(entity)
+        for each_index in range(0,len(entity)):
+            if each_index == 0:
+                continue
+            # 有["a", "-", "b"], ["a", "/", "b"]。加入["a-b"]
+            if (entity[each_index] == "-") or (entity[each_index] == "/"):
+                dup_entity[each_index-1] = dup_entity[each_index-1]+dup_entity[each_index]+dup_entity[each_index-1]
+                del dup_entity[each_index]
+                del dup_entity[each_index]
+                orignial_list.append(dup_entity)
+            # 有["a-b"]。加入["a","-","b"]
+            elif ("-" in entity[each_index]) or ("/" in entity[each_index]):
+                index_1 = entity[each_index].find("-")
+                index_2 = entity[each_index].find("/")
 
-    count = 0
-    for index in range(0,len(orignial_list)-1):
-        if index in [0,1,2]:
-            continue
-        else:
-            if (orignial_list[index] == "-") or (orignial_list[index] == "/"):
-                new_list[index-1-count] = orignial_list[index-1]+orignial_list[index]+orignial_list[index+1]
-                del new_list[index-count]
-                del new_list[index-count]
-                count += 2
-            elif orignial_list[index] == "(":
-                new_len = 0 # 专门为括号而生
-                new_str = str()
+                index = 0
+                if index_1 == -1: index = index_2
+                else: index = index_1
 
-                while(index+new_len<len(orignial_list)-1 and orignial_list[index+new_len]!=")"):
-                    new_len += 1
-
-                # 最后额外多加了一次1，会出现问题，if判断一下吧
-                if index+new_len+1 < len(orignial_list):
-                    new_str = ("").join(orignial_list[index:index+new_len+1])
-                else:
-                    new_str = ("").join(orignial_list[index:len(orignial_list)])
+                if index >= len(dup_entity[each_index])-1:
                     continue
 
-                new_list[index-count] = new_str
-                for _ in range(new_len):
-                    del new_list[index-count+1]
-                count += new_len
+                dup_entity[each_index] = dup_entity[each_index][0:index]
+                dup_entity.insert(each_index+1, dup_entity[each_index][index+1:])
+                print(index, len(dup_entity[each_index]))
+                dup_entity.insert(each_index+1, dup_entity[each_index][index])
+                orignial_list.append(dup_entity)
+            
 
-    return new_list
+
+
+    
             
 
 
 # --- 子列表匹配，返回匹配的首、尾对应的元组列表 --- #
 def find_sublist(main_list, sub_list):
+    """
+    对处理后的gpt/llama3.1的输出，把原来的text和每一个entity做匹配
+    """
     sub_len = len(sub_list)
     index_list = list()
     flag_in = False
@@ -79,42 +91,7 @@ def find_sublist(main_list, sub_list):
         return index_list
     else: # 没找到 
         return -1  
-
-
-
-# ------ ann文件结果生成BIO tag，为了评估 ----- # 
-def convert_ann_to_bio(text, entities):
-    gold_cant_match = 0
-
-    text = text.lower()
-    no_spaces_text = text.split(" ")
-    no_spaces_text = process_special_token(no_spaces_text)
-
-    software_names = list(set(entities)) # 文中可能会多次复现，去重
-    software_names_list = [process_special_token(item.lower().split(" ")) for item in software_names]
-
-    bio_index = list()
-    for item in software_names_list:
-        current_index_list = find_sublist(no_spaces_text, item)
-        if current_index_list == -1:
-            print(no_spaces_text)
-            print("ann to bio","*"*10, item)
-            gold_cant_match += 1
-
-        else:
-            bio_index += current_index_list
-
-    bio_list = ["O"] * len(no_spaces_text)
-    # 遍历每个索引对，并设置对应位置为True
-    for start, end in bio_index:
-        for i in range(start, end + 1):  # 因为end是包含的，所以用end + 1
-            if i == start:
-                bio_list[i] = "B"
-            else:
-                bio_list[i] = "I"
-    return bio_list, gold_cant_match
     
-
 
 
 # ------- llama3.1输出结果生成BIO tag，为了评估 ------- #
@@ -122,52 +99,61 @@ def convert_ann_to_bio(text, entities):
 # output: ['O', 'B-PER', 'O', 'B-ORG', 'B-ORG', 'I-ORG', 'O', 'B-PER', 'I-PER', 'O']
 def convert_txt_to_bio(text, entities):
 
-    # 原始文本全部变成小写 & 把“-”前后给合并了
+    """
+    逻辑得修改，是对entity做preprocess，而不是对text做啦。保证列表长度一致
+    """
+    # 原始文本全部变成小写
     text = text.lower()
     no_spaces_text = text.split(" ")
-    no_spaces_text = process_special_token(no_spaces_text)
 
-    # softwarename变成[[],[]]的格式，做子列表的匹配
+    # software name变成[[],[]]的格式，做子列表的匹配
     software_names = list(set([item["name"] for item in entities]))
     # print("*"*5, software_names)
-    software_names_list = [process_special_token(item.lower().split(" ")) for item in software_names]
-    # print("#"*5, software_names_list)
+    software_names_list = [item.lower().split(" ") for item in software_names]
+    process_special_token(software_names_list)
+    print("#"*5, software_names_list)
 
     bio_index = list()
     for item in software_names_list:
         # 子列表的匹配
         current_index_list = find_sublist(no_spaces_text, item)
         if current_index_list == -1:
-            
-            print(no_spaces_text)
             print("txt to bio","="*10, item)
         else:
             bio_index += current_index_list
 
     bio_list = ["O"] * len(no_spaces_text)
-    # 遍历每个索引对，并设置对应位置为True
+
+    # 遍历每个索引对，并设置对应位置为B或者I
     for start, end in bio_index:
         for i in range(start, end + 1):  # 因为end是包含的，所以用end + 1
             if i == start:
                 bio_list[i] = "B"
             else:
                 bio_list[i] = "I"
-
     return bio_list
-
-
-
-
-
 
 
 
 # ---------- 调用gpt-4o和llama3.1来推理 -------- # 
 
-def gpt_4o_infer(system_role, prompt_template, paper):
+def gpt_4o_infer(paper):
+
     '''
     Extract something from the abstract of a paper based on the given prompt template.
     '''
+    print("* gpt-4o is inferring")
+    system_role = SYSTEM_ROLE
+    prompt_template = TPL_PROMPT
+    guidelines = """"""
+    few_shots = """"""
+    with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
+        for line in file_txt:
+            guidelines += line
+    with open("../../datasets/prompts/few_shots_Llama31.txt", 'r', encoding='utf-8') as file_txt:
+        for line in file_txt:
+            few_shots += line
+
     try:
         # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
         # 传入的paper会给键值对
@@ -185,7 +171,7 @@ def gpt_4o_infer(system_role, prompt_template, paper):
                             f"\n"\
                             f"# OUTPUT: \n"
         
-        client = OpenAI(api_key = OPENAI_KEY)
+        client = OpenAI(api_key = OPENAI_APIKEY)
         completion = client.chat.completions.create(
             model = "gpt-4o-mini",
             messages=[
@@ -208,8 +194,8 @@ def gpt_4o_infer(system_role, prompt_template, paper):
 
 
 
-
 def llama_31_infer(paper):
+    print("* llama 3.1 is inferring")
     tmp = extract(SYSTEM_ROLE, TPL_PROMPT, paper)
     if tmp is None:
         # no software names found or error
@@ -260,6 +246,8 @@ if __name__ == "__main__":
 
     merged_list = zip(new_txt, new_ann)
     gold_cant_match = 0
+
+
     for txt, ann in tqdm(merged_list, total=len(new_ann)):
         current_paper = dict() # 包含pmid, title 和 abstract的字典
 
@@ -267,10 +255,15 @@ if __name__ == "__main__":
         file_name_without_extension = os.path.splitext(file_name)[0]  # 去除扩展名
         # 此时abstract和title先分开放，到时候调llama3.1推理的时候再合并
 
+
+        # ------ txt文件 ------ #
+        txt_with_index_content = []
         with open(txt, "r", encoding="utf-8") as x_data: # Use writelines to write list
+            txt_content = []
             count = -1
             current_paper["pmid"] = file_name_without_extension
             for line in x_data:
+                # -- 让model infer的 -- #
                 count += 1
                 processed_line = line.strip()
                 if count==0:
@@ -278,33 +271,72 @@ if __name__ == "__main__":
                     current_paper["abstract"] = ""
                 else:
                     current_paper["abstract"] += processed_line
-        
-        gold_entities = list()
+                
+                # -- 让ann生成gold bio list的 -- #
+                content = line.strip().split(" ")
+                txt_content.extend(content)
+                cur_index = 0
+                for item in txt_content:
+                    txt_with_index_content.append((cur_index, item))
+                    cur_index = cur_index + len(item) + 1
+
+
+        # ------ ann文件 ------ #
+        current_gold_list = list()
+        current_gold_dict = dict()
         with open(ann, "r", encoding="utf-8") as y_data: # Use writelines to write list
             for line in y_data:
                 current_mes = line.strip().split("\t")
-                gold_entities.append(current_mes[-1])
+                index_initial = current_mes[1].strip().split(" ")
+                if len(index_initial) == 3:
+                    index = (int(index_initial[1]), int(index_initial[2]))
+                elif len(index_initial) == 4: 
+                    item_index = index_initial[2].find(";")
+                    index = (int(index_initial[1]), int(index_initial[2][0:item_index]))
+                current_gold_list.append((index, current_mes[-1]))
 
-
+                current_gold_dict[index[0]] = (index[1], current_mes[-1])
+                # index[0]是entity刚开始的坐标，index[1]是entity结束的坐标, current_mes是mention的名字
         
+
+        # ------ 生成ann文件的gold label ------ #
+        gold_current_label = list()
+        flag = False
+        last_index = 0
+        for item in txt_with_index_content:
+            men_index = item[0]
+            men_name = item[1]
+            if (flag == False) & (men_index in current_gold_dict.keys()): # matched! & B
+                gold_current_label.append("B")
+                flag = True
+                last_index = current_gold_dict[men_index][0]
+            elif flag == True: # matched! & I
+                if men_index <= last_index:
+                    gold_current_label.append("I")
+                else: # end match & O
+                    gold_current_label.append("O")
+                    flag = False
+            else:
+                gold_current_label.append("O")
+                
+        # -- 两模型infer -- #
         pred_llama_entities = llama_31_infer(current_paper) # 在函数内把current_paper给改了，把title加到了abstract上
-        pred_gpt4o_entities = gpt_4o_infer(current_paper) # 在函数内把current_paper给改了，把title加到了abstract上
+        # pred_gpt4o_entities = gpt_4o_infer(current_paper) # 在函数内把current_paper给改了，把title加到了abstract上
         
+        # -- pred：两模型生成bio list -- #
         pred_llama_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_llama_entities["software"])
-        pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"])
-
-        llama_all_pred.append(pred_llama_bio_list)
-        gpt4o_all_pred.append(pred_gpt4o_bio_list)
+        # pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"])
+        llama_all_pred += pred_llama_bio_list
+        # gpt4o_all_pred += pred_gpt4o_bio_list
         
-        gold_bio_list, current_count = convert_ann_to_bio(current_paper["abstract"], gold_entities)
-        gold_cant_match += current_count # 真实entity匹配补上的
-        all_gold.append(gold_bio_list)
+        #  -- gold：ann的bio list -- #
+        all_gold += gold_current_label
 
-    llama_metrics = classification_report(tags_true=gold_bio_list, tags_pred=pred_llama_bio_list, mode="lenient") # for lenient match
-    gpt4o_metrics = classification_report(tags_true=gold_bio_list, tags_pred=pred_gpt4o_bio_list, mode="lenient") # for lenient match
+    llama_metrics = classification_report(tags_true=all_gold, tags_pred=llama_all_pred, mode="lenient") # for lenient match
+    # gpt4o_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="lenient") # for lenient match
     # "lenient", "strict"
     print("The result of LLaMA3.1 is", llama_metrics)
-    print("The result of Gpt-4o is", gpt4o_metrics)
+    # print("The result of Gpt-4o is", gpt4o_metrics)
     
         
         

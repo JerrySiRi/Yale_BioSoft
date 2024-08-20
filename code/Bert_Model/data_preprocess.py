@@ -33,7 +33,7 @@ def convert_files_to_txt(folder_path, output_file):
             ann_label_dict = dict()
 
             basename = os.path.splitext(txt)[0] # split filtname and extract its name without extension
-            ann = basename+".ann"
+            ann = basename + ".ann"
             with open(os.path.join(folder_path, txt), 'r', encoding='utf-8') as file_txt:
                 txt_content = []
                 for line in file_txt:
@@ -60,8 +60,6 @@ def convert_files_to_txt(folder_path, output_file):
                 
                 flag = False
                 last_index = 0
-
-
                 for item in txt_with_index_content:
                     men_index = item[0]
                     men_name = item[1]
