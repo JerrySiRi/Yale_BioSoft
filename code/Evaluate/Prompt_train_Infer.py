@@ -285,12 +285,10 @@ if __name__ == "__main__":
                 processed_line = line.strip()
                 if count==0:
                     current_paper["title"] = processed_line
-                    print("分之前",len(processed_line.split(" ")))
                     current_paper["abstract"] = ""
                 else:
                     current_paper["abstract"] += " "+ processed_line
                     # BUG!!!!!! 分句的时候会去掉空格！导致最后长度不对
-                    #print("分之前",len(processed_line.split(" ")))
                 
                 # -- 让ann生成gold bio list的 -- #
                 content = line.strip().split(" ")
@@ -298,11 +296,7 @@ if __name__ == "__main__":
                 for item in content:
                     txt_with_index_content.append((cur_index, item))
                     cur_index = cur_index + len(item) + 1
-            #print("分完再和", len((current_paper["abstract"]+current_paper["title"]).split(" ")))
 
-
-
-        print("txt_with_index_content", len(txt_with_index_content))
         # ------ ann文件 ------ #
         current_gold_list = list()
         current_gold_dict = dict()
@@ -351,7 +345,6 @@ if __name__ == "__main__":
 
 
         # -- 两模型infer -- #
-        print("&", len(current_paper["abstract"].split(" ")))
         pred_llama_entities = llama_31_infer(current_paper) # 在函数内把current_paper给改了，把title加到了abstract上
         # pred_gpt4o_entities = gpt_4o_infer(current_paper) # 在函数内把current_paper给改了，把title加到了abstract上
         
@@ -364,19 +357,19 @@ if __name__ == "__main__":
         
         #  -- gold：ann的bio list -- #
         all_gold += gold_current_label
-        print(len(current_paper["abstract"].split(" ")))
-        print(len(pred_llama_bio_list))
-        print(len(gold_current_label))
+        
 
         assert(len(pred_llama_bio_list) == len(gold_current_label))
-        exit()
 #%%
+    print("Lenient metric")
     llama_metrics = classification_report(tags_true=all_gold, tags_pred=llama_all_pred, mode="lenient", verbose=True) # for lenient match
+    print("The result of LLaMA3.1 is", dict(llama_metrics))
+    print("Strict metric")
+    llama_metrics = classification_report(tags_true=all_gold, tags_pred=llama_all_pred, mode="strict", verbose=True)
+    print("The result of LLaMA3.1 is", dict(llama_metrics))
+    
     # gpt4o_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="lenient") # for lenient match
     # "lenient", "strict"
-    print(all_gold[:10])
-    print(llama_all_pred[:10])
-    print("The result of LLaMA3.1 is", dict(llama_metrics))
     # print("The result of Gpt-4o is", gpt4o_metrics)
     
         
