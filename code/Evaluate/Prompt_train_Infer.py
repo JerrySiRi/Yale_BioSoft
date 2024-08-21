@@ -144,9 +144,9 @@ def convert_txt_to_bio(text, entities):
     for start, end in bio_index:
         for i in range(start, end + 1):  # 因为end是包含的，所以用end + 1
             if i == start:
-                bio_list[i] = "B"
+                bio_list[i] = "B-SWN"
             else:
-                bio_list[i] = "I"
+                bio_list[i] = "I-SWN"
     return bio_list
 
 
@@ -330,12 +330,12 @@ if __name__ == "__main__":
             men_index = item[0]
             men_name = item[1]
             if (flag == False) & (men_index in current_gold_dict.keys()): # matched! & B
-                gold_current_label.append("B")
+                gold_current_label.append("B-SWN")
                 flag = True
                 last_index = current_gold_dict[men_index][0]
             elif flag == True: # matched! & I
                 if men_index <= last_index:
-                    gold_current_label.append("I")
+                    gold_current_label.append("I-SWN")
                 else: # end match & O
                     gold_current_label.append("O")
                     flag = False
