@@ -67,7 +67,7 @@ few_shots = """"""
 with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
     for line in file_txt:
         guidelines += line
-with open("../../datasets/prompts/few_shots_Llama31_4.txt", 'r', encoding='utf-8') as file_txt:
+with open("../../datasets/prompts/few_shots_Llama31_8.txt", 'r', encoding='utf-8') as file_txt:
     for line in file_txt:
         few_shots += line
 
