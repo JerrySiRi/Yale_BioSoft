@@ -127,21 +127,37 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
             eval_list.append(f"{ot} {ol} {pl}\n")
         eval_list.append("\n")
     
+    full_ori_labels = list()
+    full_pred_labels = list()
+
+    # 去掉末尾padding的I
+    for index in range(0, len(ori_labels)):
+        valid_index = len(ori_labels)
+        while valid_index > 0 and ori_labels[index][valid_index - 1] == "I":
+            valid_index -= 1
+        full_ori_labels.extend(ori_labels[index][:valid_index])
+        full_pred_labels.extend(pred_labels[index][:valid_index])
+    print(full_ori_labels[:256])
+    print(full_pred_labels[:256])
     print("Lenient")
-    classification_report(tags_true=ori_labels, tags_pred=pred_labels, mode="lenient") # for lenient match
+    lenient_metrics = classification_report(tags_true=full_ori_labels, tags_pred=full_pred_labels, mode="lenient") # for lenient match
+    print(lenient_metrics)
     print("Strict")
-    classification_report(tags_true=ori_labels, tags_pred=pred_labels, mode="strict") # for strict match
+    strict_metrics = classification_report(tags_true=full_ori_labels, tags_pred=full_pred_labels, mode="strict") # for strict match
+    print(strict_metrics)
 
     # eval the model 
     ###counts = conlleval.evaluate(eval_list)
     ###conlleval.report(counts)
 
     # namedtuple('Metrics', 'tp fp fn prec rec fscore')
-    ###overall, by_type = conlleval.metrics(counts)
-    overall = list()
-    by_type = list()
-    
-    return overall, by_type
+    ###overall, by_type = conlleval.metrics(counts)    
+    ###return overall, by_type
+    print("&"*10,dict(lenient_metrics["default"]).keys)
+    return dict(lenient_metrics["default"]), list()
+
+
+
 
 
 def match_dim_tokenizer_model(tokenizer, model, device):
@@ -416,7 +432,7 @@ def main():
 
 
                 # add eval result to tensorboard
-                f1_score = overall.fscore
+                f1_score = overall["f1-score"]
                 ###writer.add_scalar("Eval/precision", overall.prec, ep)
                 ###writer.add_scalar("Eval/recall", overall.rec, ep)
                 ###writer.add_scalar("Eval/f1_score", overall.fscore, ep)
