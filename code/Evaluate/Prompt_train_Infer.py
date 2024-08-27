@@ -159,7 +159,7 @@ def convert_txt_to_bio(text, entities, model: str = "llama31"):
 
 # ---------- 调用gpt-4o和llama3.1来推理 -------- # 
 
-def gpt_4o_infer(paper, prompt_number : int = 8):
+def gpt_4o_infer(model, paper, prompt_number : int = 8):
     # 说明prompt number的类型是int，默认值是8
 
     print("* gpt-4o is inferring")
@@ -194,7 +194,7 @@ def gpt_4o_infer(paper, prompt_number : int = 8):
 
         client = OpenAI(api_key = OPENAI_APIKEY)
         completion = client.chat.completions.create(
-            model = "gpt-4o-mini",
+            model = f"{model}",
             messages=[
                 {"role": "system", "content": system_role},
                 {"role": "user", "content": Prompt_all}
@@ -314,7 +314,7 @@ if __name__ == "__main__":
             combined_length = len(current_paper["abstract"].split(" ")) + len(current_paper["title"].split(" "))
             combined_data = current_paper["title"].split(" ") + current_paper["abstract"].split(" ")
             original_length = len(txt_with_index_content)
-            
+
             """
             assert combined_length == original_length, (
                 f"Assertion failed!\n"
@@ -387,9 +387,17 @@ if __name__ == "__main__":
             llama_all_pred += pred_llama_bio_list
             all_gold += gold_current_label
             assert(len(pred_llama_bio_list) == len(gold_current_label))
+
         elif args.model == "gpt4omini":
             # - gpt-4o mini infer - # 
-            pred_gpt4o_entities = gpt_4o_infer(current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
+            pred_gpt4o_entities = gpt_4o_infer("gpt-4o-mini", current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
+            pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"], model="gpt4omini")
+            gpt4o_all_pred += pred_gpt4o_bio_list
+            all_gold += gold_current_label
+
+        elif args.model == "gpt4o":
+            # - gpt-4o mini infer - # 
+            pred_gpt4o_entities = gpt_4o_infer("gpt-4o", current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
             pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"], model="gpt4omini")
             gpt4o_all_pred += pred_gpt4o_bio_list
             all_gold += gold_current_label
@@ -423,6 +431,15 @@ if __name__ == "__main__":
         print("Strict metric")
         llama_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="strict", verbose=True)
         print("The result of GPT-4o mini is", dict(llama_metrics))
+        
+    elif args.model == "gpt4o":
+
+        print("Lenient metric")
+        llama_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="lenient", verbose=True) # for lenient match
+        print("The result of GPT-4o is", dict(llama_metrics))
+        print("Strict metric")
+        llama_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="strict", verbose=True)
+        print("The result of GPT-4o is", dict(llama_metrics))
     
 
 # %%
