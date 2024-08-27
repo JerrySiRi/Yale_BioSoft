@@ -129,7 +129,7 @@ def convert_txt_to_bio(text, entities, model: str = "llama31"):
     # software name变成[ [],[] ]的格式，做子列表的匹配
     if model == "llama31":
         software_names = list(set([item["name"] for item in entities]))
-    elif model == "gpt4omini":
+    elif (model == "gpt4omini") or (model == "gpt4o"):
         software_names = list(set([item for item in entities]))
 
     software_names_list = [item.lower().split(" ") for item in software_names]
@@ -383,6 +383,8 @@ if __name__ == "__main__":
         # - llama 3.1 infer - #
         if args.model == "llama31":
             pred_llama_entities = llama_31_infer(current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
+            if pred_gpt4o_entities == None:
+                continue
             pred_llama_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_llama_entities["software"], model = "llama31")
             llama_all_pred += pred_llama_bio_list
             all_gold += gold_current_label
@@ -391,6 +393,8 @@ if __name__ == "__main__":
         elif args.model == "gpt4omini":
             # - gpt-4o mini infer - # 
             pred_gpt4o_entities = gpt_4o_infer("gpt-4o-mini", current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
+            if pred_gpt4o_entities == None:
+                continue
             pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"], model="gpt4omini")
             gpt4o_all_pred += pred_gpt4o_bio_list
             all_gold += gold_current_label
@@ -398,10 +402,12 @@ if __name__ == "__main__":
         elif args.model == "gpt4o":
             # - gpt-4o mini infer - # 
             pred_gpt4o_entities = gpt_4o_infer("gpt-4o", current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
-            pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"], model="gpt4omini")
+            if pred_gpt4o_entities == None:
+                continue
+
+            pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"], model="gpt4o")
             gpt4o_all_pred += pred_gpt4o_bio_list
             all_gold += gold_current_label
-
 
             assert len(pred_gpt4o_bio_list) == len(gold_current_label), (
                 f"Assertion failed!\n"
@@ -431,7 +437,7 @@ if __name__ == "__main__":
         print("Strict metric")
         llama_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="strict", verbose=True)
         print("The result of GPT-4o mini is", dict(llama_metrics))
-        
+
     elif args.model == "gpt4o":
 
         print("Lenient metric")
