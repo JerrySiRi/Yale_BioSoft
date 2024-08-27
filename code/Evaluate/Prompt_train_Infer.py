@@ -3,6 +3,8 @@ import os
 import sys
 import re
 import argparse
+import re
+import argparse
 from openai import OpenAI
 from dotenv import load_dotenv
 import pandas as pd
@@ -17,6 +19,7 @@ load_dotenv()
 LLama31_infer_path = os.getenv('LLama31_infer_path')
 sys.path.append(LLama31_infer_path)
 from llama_infer import *
+
 
 
 # -- 加入gpt-4o的infer模块
@@ -52,6 +55,21 @@ def process_special_token(orignial_list):
     def combine_data(data):
         pass
     
+    def split_data(data, token):
+        result = []
+        regex_pattern = re.compile(f'({re.escape(token)})')
+        for item in data:
+            if "-" in item:
+                # 使用正则表达式拆分，并保留分隔符
+                split_items = regex_pattern.split(item)
+                result.extend(split_items)
+            else:
+                # 如果元素不包含 "-", 直接添加到结果中
+                result.append(item)
+        return result
+    def combine_data(data):
+        pass
+    
     return_list = deepcopy(orignial_list)
     for entity in orignial_list:
         # 每一个item是一个列表
@@ -72,7 +90,19 @@ def process_special_token(orignial_list):
 
             
             # 【还是要做的，基本上没找到都是因为这个】
+            
+            # 【还是要做的，基本上没找到都是因为这个】
             # 有["a-b"]。加入["a","-","b"]
+            elif ("-" in entity[each_index]):
+                splited_data = split_data(entity, "-")
+                return_list.append(splited_data)
+            elif ("/" in entity[each_index]):
+                splited_data = split_data(entity, "/")
+                return_list.append(splited_data)
+            elif ("+" in entity[each_index]):
+                splited_data = split_data(entity, "+")
+                return_list.append(splited_data)
+                
             elif ("-" in entity[each_index]):
                 splited_data = split_data(entity, "-")
                 return_list.append(splited_data)
@@ -127,6 +157,11 @@ def convert_txt_to_bio(text, entities, model: str = "llama31"):
         software_names = list(set([item["name"] for item in entities]))
     elif model == "gpt4omini":
         software_names = list(set([item for item in entities]))
+    # software name变成[ [],[] ]的格式，做子列表的匹配
+    if model == "llama31":
+        software_names = list(set([item["name"] for item in entities]))
+    elif model == "gpt4omini":
+        software_names = list(set([item for item in entities]))
     # print("*"*5, software_names)
     software_names_list = [item.lower().split(" ") for item in software_names]
     software_names_list = process_special_token(software_names_list)
@@ -138,6 +173,7 @@ def convert_txt_to_bio(text, entities, model: str = "llama31"):
         current_index_list = find_sublist(no_spaces_text, item)
         if current_index_list == -1:
             pass
+            pass
         else:
             bio_index += current_index_list
 
@@ -148,7 +184,9 @@ def convert_txt_to_bio(text, entities, model: str = "llama31"):
         for i in range(start, end + 1):  # 因为end是包含的，所以用end + 1
             if i == start:
                 bio_list[i] = "B-SWN"
+                bio_list[i] = "B-SWN"
             else:
+                bio_list[i] = "I-SWN"
                 bio_list[i] = "I-SWN"
     return bio_list
 
@@ -186,6 +224,8 @@ def gpt_4o_infer(paper, prompt_number : int = 8):
                             f"# INPUT: {prompt} \n"\
                             f"\n"\
                             f"# OUTPUT: \n"
+        
+
         
 
         client = OpenAI(api_key = OPENAI_APIKEY)
@@ -239,6 +279,12 @@ def llama_31_infer(paper, prompt_number:int):
 
 #%%
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--model', type=str, default='llama31', help='Use different models to infer')
+    parser.add_argument('-pn', '--prompt_number', type=int, default=8, help='Number of few shots')
+    args = parser.parse_args()
+
+    
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model', type=str, default='llama31', help='Use different models to infer')
     parser.add_argument('-pn', '--prompt_number', type=int, default=8, help='Number of few shots')
@@ -303,6 +349,7 @@ if __name__ == "__main__":
                     cur_index = cur_index + len(item) + 1
 
 
+
         # ------ ann文件 ------ #
         current_gold_list = list()
         current_gold_dict = dict()
@@ -337,10 +384,12 @@ if __name__ == "__main__":
             men_name = item[1]
             if (flag == False) & (men_index in current_gold_dict.keys()): # matched! & B
                 gold_current_label.append("B-SWN")
+                gold_current_label.append("B-SWN")
                 flag = True
                 last_index = current_gold_dict[men_index][0]
             elif flag == True: # matched! & I
                 if men_index <= last_index:
+                    gold_current_label.append("I-SWN")
                     gold_current_label.append("I-SWN")
                 else: # end match & O
                     gold_current_label.append("O")
