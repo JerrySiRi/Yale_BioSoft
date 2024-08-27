@@ -1,1 +1,1 @@
-python Prompt_train_Infer.py -m gpt4o -pn 8
+python Prompt_train_Infer.py -m llama31 -pn 4

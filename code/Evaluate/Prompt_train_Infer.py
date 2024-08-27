@@ -383,7 +383,7 @@ if __name__ == "__main__":
         # - llama 3.1 infer - #
         if args.model == "llama31":
             pred_llama_entities = llama_31_infer(current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
-            if pred_gpt4o_entities == None:
+            if pred_llama_entities == None:
                 continue
             pred_llama_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_llama_entities["software"], model = "llama31")
             llama_all_pred += pred_llama_bio_list
