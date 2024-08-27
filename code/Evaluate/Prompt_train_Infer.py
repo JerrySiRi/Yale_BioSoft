@@ -8,7 +8,6 @@ import argparse
 from openai import OpenAI
 from dotenv import load_dotenv
 import pandas as pd
-from datasets import Dataset, DatasetDict
 from ner_metrics_both import classification_report
 from copy import deepcopy
 import tqdm
@@ -52,23 +51,7 @@ def process_special_token(orignial_list):
                 # 如果元素不包含 "-", 直接添加到结果中
                 result.append(item)
         return result
-    def combine_data(data):
-        pass
     
-    def split_data(data, token):
-        result = []
-        regex_pattern = re.compile(f'({re.escape(token)})')
-        for item in data:
-            if "-" in item:
-                # 使用正则表达式拆分，并保留分隔符
-                split_items = regex_pattern.split(item)
-                result.extend(split_items)
-            else:
-                # 如果元素不包含 "-", 直接添加到结果中
-                result.append(item)
-        return result
-    def combine_data(data):
-        pass
     
     return_list = deepcopy(orignial_list)
     for entity in orignial_list:
@@ -93,16 +76,6 @@ def process_special_token(orignial_list):
             
             # 【还是要做的，基本上没找到都是因为这个】
             # 有["a-b"]。加入["a","-","b"]
-            elif ("-" in entity[each_index]):
-                splited_data = split_data(entity, "-")
-                return_list.append(splited_data)
-            elif ("/" in entity[each_index]):
-                splited_data = split_data(entity, "/")
-                return_list.append(splited_data)
-            elif ("+" in entity[each_index]):
-                splited_data = split_data(entity, "+")
-                return_list.append(splited_data)
-                
             elif ("-" in entity[each_index]):
                 splited_data = split_data(entity, "-")
                 return_list.append(splited_data)
@@ -147,6 +120,7 @@ def find_sublist(main_list, sub_list):
 # ------- llama3.1输出结果生成BIO tag，为了评估 ------- #
 # input: 原始文本, 抽取结果
 # output: ['O', 'B-PER', 'O', 'B-ORG', 'B-ORG', 'I-ORG', 'O', 'B-PER', 'I-PER', 'O']
+
 def convert_txt_to_bio(text, entities, model: str = "llama31"):
     # 原始文本全部变成小写
     text = text.lower()
@@ -157,12 +131,7 @@ def convert_txt_to_bio(text, entities, model: str = "llama31"):
         software_names = list(set([item["name"] for item in entities]))
     elif model == "gpt4omini":
         software_names = list(set([item for item in entities]))
-    # software name变成[ [],[] ]的格式，做子列表的匹配
-    if model == "llama31":
-        software_names = list(set([item["name"] for item in entities]))
-    elif model == "gpt4omini":
-        software_names = list(set([item for item in entities]))
-    # print("*"*5, software_names)
+
     software_names_list = [item.lower().split(" ") for item in software_names]
     software_names_list = process_special_token(software_names_list)
     # print("#"*5, software_names_list)
@@ -172,7 +141,6 @@ def convert_txt_to_bio(text, entities, model: str = "llama31"):
         # 子列表的匹配
         current_index_list = find_sublist(no_spaces_text, item)
         if current_index_list == -1:
-            pass
             pass
         else:
             bio_index += current_index_list
@@ -184,9 +152,7 @@ def convert_txt_to_bio(text, entities, model: str = "llama31"):
         for i in range(start, end + 1):  # 因为end是包含的，所以用end + 1
             if i == start:
                 bio_list[i] = "B-SWN"
-                bio_list[i] = "B-SWN"
             else:
-                bio_list[i] = "I-SWN"
                 bio_list[i] = "I-SWN"
     return bio_list
 
@@ -212,7 +178,7 @@ def gpt_4o_infer(paper, prompt_number : int = 8):
         # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
         # 传入的paper会给键值对
         # 【改】把原来的prompt加到了abstract里边
-        paper["abstract"] = paper["title"] + paper["abstract"]
+        paper["abstract"] = paper["title"] + " " + paper["abstract"]
         prompt = prompt_template.format(**paper)
 
         # 返回的是一个json对象，有"software"关键字
@@ -224,8 +190,6 @@ def gpt_4o_infer(paper, prompt_number : int = 8):
                             f"# INPUT: {prompt} \n"\
                             f"\n"\
                             f"# OUTPUT: \n"
-        
-
         
 
         client = OpenAI(api_key = OPENAI_APIKEY)
@@ -284,13 +248,7 @@ if __name__ == "__main__":
     parser.add_argument('-pn', '--prompt_number', type=int, default=8, help='Number of few shots')
     args = parser.parse_args()
 
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model', type=str, default='llama31', help='Use different models to infer')
-    parser.add_argument('-pn', '--prompt_number', type=int, default=8, help='Number of few shots')
-    args = parser.parse_args()
 
-    
     # 训练+测试集数据
     train_folder_path = "../../datasets/train_data"
     test_folder_path = "../../datasets/test_gold"
@@ -326,27 +284,51 @@ if __name__ == "__main__":
 
         # ------ txt文件 ------ #
         txt_with_index_content = []
+
+        combined_length = 0
+        original_length = 0
         with open(txt, "r", encoding="utf-8") as x_data: # Use writelines to write list
             
             count = -1
+            cur_index = 0
             current_paper["pmid"] = file_name_without_extension
             for line in x_data:
                 # -- 让model infer的 -- #
                 count += 1
                 processed_line = line.strip()
                 if count==0:
-                    current_paper["title"] = processed_line
-                    current_paper["abstract"] = ""
+                    current_paper["title"] = processed_line.strip()
+                    current_paper["abstract"] = str()
                 else:
-                    current_paper["abstract"] += " "+ processed_line
+                    current_paper["abstract"] += processed_line.strip() + " " 
                     # BUG!!!!!! 分句的时候会去掉空格！导致最后长度不对
                 
                 # -- 让ann生成gold bio list的 -- #
                 content = line.strip().split(" ")
-                cur_index = 0
                 for item in content:
                     txt_with_index_content.append((cur_index, item))
-                    cur_index = cur_index + len(item) + 1
+                    cur_index = cur_index + len(item) + 1 # 包含原句中的空格的index
+            current_paper["abstract"] = current_paper["abstract"][:-1] # 去掉最后一行多加的空格
+
+
+            combined_length = len(current_paper["abstract"].split(" ")) + len(current_paper["title"].split(" "))
+            combined_data = current_paper["title"].split(" ") + current_paper["abstract"].split(" ")
+            original_length = len(txt_with_index_content)
+            
+            """
+            assert combined_length == original_length, (
+                f"Assertion failed!\n"
+                f"Expected: combined length is {len(txt_with_index_content)}\n"
+                f"Got: {combined_length}\n"
+                f"Details: Combined data = {combined_data} \n Original data = {txt_with_index_content}\n"
+            )
+            """
+            
+        if combined_length != original_length:
+            print("*"*20)
+            continue
+        
+        
 
 
 
@@ -384,12 +366,10 @@ if __name__ == "__main__":
             men_name = item[1]
             if (flag == False) & (men_index in current_gold_dict.keys()): # matched! & B
                 gold_current_label.append("B-SWN")
-                gold_current_label.append("B-SWN")
                 flag = True
                 last_index = current_gold_dict[men_index][0]
             elif flag == True: # matched! & I
                 if men_index <= last_index:
-                    gold_current_label.append("I-SWN")
                     gold_current_label.append("I-SWN")
                 else: # end match & O
                     gold_current_label.append("O")
@@ -414,7 +394,13 @@ if __name__ == "__main__":
             gpt4o_all_pred += pred_gpt4o_bio_list
             all_gold += gold_current_label
 
-            assert(len(pred_gpt4o_bio_list) == len(gold_current_label))
+
+            assert len(pred_gpt4o_bio_list) == len(gold_current_label), (
+                f"Assertion failed!\n"
+                f"Expected: len(pred_gpt4o_bio_list) is {len(gold_current_label)}\n"
+                f"Got: {len(pred_gpt4o_bio_list)}\n"
+                f"Details: pred_gpt4o_bio_list = {pred_gpt4o_bio_list} \n gold_current_label = {gold_current_label}\n"
+            )
 
 
 #%%
@@ -438,7 +424,5 @@ if __name__ == "__main__":
         llama_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="strict", verbose=True)
         print("The result of GPT-4o mini is", dict(llama_metrics))
     
-        
-        
 
 # %%

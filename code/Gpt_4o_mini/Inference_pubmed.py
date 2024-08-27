@@ -46,7 +46,7 @@ def Inference_based_on_text(text, OPENAI_KEY = None, guidelines=None, few_shots=
         #f"True Differential Diagnosis: {true_diagnosis_array}"
     ]
     completion = client.chat.completions.create(
-    model="gpt-4o-mini",
+    model="gpt-4o",
     messages = current_prompt
     )
     answer = completion.choices[0].message.content

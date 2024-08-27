@@ -92,7 +92,7 @@ def extract(system_role, prompt_template, paper, prompt_number):
         # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
         # 传入的paper会给键值对
         # 【改】把原来的prompt加到了abstract里边
-        paper["abstract"] = paper["title"] + paper["abstract"]
+        paper["abstract"] = paper["title"] + " " + paper["abstract"]
         prompt = prompt_template.format(**paper)
 
         # 返回的是一个json对象，有"software"关键字

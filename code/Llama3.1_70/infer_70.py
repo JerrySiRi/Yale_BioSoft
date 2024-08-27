@@ -1,4 +1,5 @@
 # 管道中自定义预训练模型与分词器
+
 #%%
 from transformers import pipeline, AutoConfig, AutoModelForCausalLM, AutoTokenizer
 import json
@@ -90,7 +91,6 @@ def infer_70(system_role, prompt_template, paper, prompt_number):
         # print full stack
         import traceback
         traceback.print_exc()
-
         return None
 
 
@@ -103,6 +103,7 @@ A description of the various functions and the implementation mode is given .
 Some examples illustrate the user interface .
     """
     result = infer_70(TPL_PROMPT, demo_paper, 16)
+    
 
 
 
