@@ -1,6 +1,8 @@
 #%%
 import os
 import sys
+import re
+import argparse
 from openai import OpenAI
 from dotenv import load_dotenv
 import pandas as pd
@@ -16,15 +18,13 @@ LLama31_infer_path = os.getenv('LLama31_infer_path')
 sys.path.append(LLama31_infer_path)
 from llama_infer import *
 
+
 # -- 加入gpt-4o的infer模块
 load_dotenv()
 gpt_infer_path = os.getenv('GPT_infer_path')
 OPENAI_APIKEY = os.getenv("OPENAI_APIKEY")
 sys.path.append(gpt_infer_path)
 from Inference_pubmed import *
-
-
-# -- 加入gpt-4o的infer代码 -- #
 
 
 
@@ -37,48 +37,52 @@ def process_special_token(orignial_list):
     TODO: 如果最里边的[]。两边加空格：-,/。左边加空格：!,+。拆开：（）
     output: 直接在原列表上修改
     """
+    def split_data(data, token):
+        result = []
+        regex_pattern = re.compile(f'({re.escape(token)})')
+        for item in data:
+            if "-" in item:
+                # 使用正则表达式拆分，并保留分隔符
+                split_items = regex_pattern.split(item)
+                result.extend(split_items)
+            else:
+                # 如果元素不包含 "-", 直接添加到结果中
+                result.append(item)
+        return result
+    def combine_data(data):
+        pass
+    
     return_list = deepcopy(orignial_list)
     for entity in orignial_list:
         # 每一个item是一个列表
         dup_entity = deepcopy(entity)
         count = 0 # 删除的个数
 
-        # each_index 是entity的坐标索引
-        # dup_index = each_index-count 是dup_entity的坐标索引
-
         for each_index in range(0,len(entity)):
             dup_index = each_index - count
 
-            if each_index == 0:
-                continue
-
             # 有["a", "-", "b"], ["a", "/", "b"]。加入["a-b"]
             if (entity[each_index] == "-") or (entity[each_index] == "/"):
-                dup_entity[dup_index-1] = dup_entity[dup_index-1]+dup_entity[dup_index]+dup_entity[dup_index+1]
-                del dup_entity[dup_index]
-                del dup_entity[dup_index]
-                count += 2
-                return_list.append(dup_entity)
-
-            """
-            # 有["a-b"]。加入["a","-","b"]
-            elif ("-" in entity[each_index]) or ("/" in entity[each_index]):
-                index_1 = entity[each_index].find("-")
-                index_2 = entity[each_index].find("/")
-
-                index = 0
-                if index_1 == -1: index = index_2
-                else: index = index_1
-
-                if index < len(dup_entity[dup_index])-1:
-                    dup_entity[dup_index] = dup_entity[dup_index][0:index]
-                    dup_entity.insert(dup_index+1, dup_entity[dup_index][index+1:])
-                    print(index, len(dup_entity[dup_index]))
-                    dup_entity.insert(dup_index+1, dup_entity[dup_index][index])
-                    count -= 2 
+                if dup_index + 1 < len(dup_entity):
+                    dup_entity[dup_index-1] += dup_entity[dup_index] + dup_entity[dup_index+1]
+                    del dup_entity[dup_index]
+                    del dup_entity[dup_index]
+                    count += 2
                     return_list.append(dup_entity)
+
             
-            """
+            # 【还是要做的，基本上没找到都是因为这个】
+            # 有["a-b"]。加入["a","-","b"]
+            elif ("-" in entity[each_index]):
+                splited_data = split_data(entity, "-")
+                return_list.append(splited_data)
+            elif ("/" in entity[each_index]):
+                splited_data = split_data(entity, "/")
+                return_list.append(splited_data)
+            elif ("+" in entity[each_index]):
+                splited_data = split_data(entity, "+")
+                return_list.append(splited_data)
+                
             
     return return_list
             
@@ -113,17 +117,16 @@ def find_sublist(main_list, sub_list):
 # ------- llama3.1输出结果生成BIO tag，为了评估 ------- #
 # input: 原始文本, 抽取结果
 # output: ['O', 'B-PER', 'O', 'B-ORG', 'B-ORG', 'I-ORG', 'O', 'B-PER', 'I-PER', 'O']
-def convert_txt_to_bio(text, entities):
-
-    """
-    逻辑得修改，是对entity做preprocess，而不是对text做啦。保证列表长度一致
-    """
+def convert_txt_to_bio(text, entities, model: str = "llama31"):
     # 原始文本全部变成小写
     text = text.lower()
     no_spaces_text = text.split(" ")
 
-    # software name变成[[],[]]的格式，做子列表的匹配
-    software_names = list(set([item["name"] for item in entities]))
+    # software name变成[ [],[] ]的格式，做子列表的匹配
+    if model == "llama31":
+        software_names = list(set([item["name"] for item in entities]))
+    elif model == "gpt4omini":
+        software_names = list(set([item for item in entities]))
     # print("*"*5, software_names)
     software_names_list = [item.lower().split(" ") for item in software_names]
     software_names_list = process_special_token(software_names_list)
@@ -134,7 +137,7 @@ def convert_txt_to_bio(text, entities):
         # 子列表的匹配
         current_index_list = find_sublist(no_spaces_text, item)
         if current_index_list == -1:
-            print("txt to bio","="*10, item)
+            pass
         else:
             bio_index += current_index_list
 
@@ -144,20 +147,17 @@ def convert_txt_to_bio(text, entities):
     for start, end in bio_index:
         for i in range(start, end + 1):  # 因为end是包含的，所以用end + 1
             if i == start:
-                bio_list[i] = "B"
+                bio_list[i] = "B-SWN"
             else:
-                bio_list[i] = "I"
+                bio_list[i] = "I-SWN"
     return bio_list
-
 
 
 # ---------- 调用gpt-4o和llama3.1来推理 -------- # 
 
-def gpt_4o_infer(paper):
+def gpt_4o_infer(paper, prompt_number : int = 8):
+    # 说明prompt number的类型是int，默认值是8
 
-    '''
-    Extract something from the abstract of a paper based on the given prompt template.
-    '''
     print("* gpt-4o is inferring")
     system_role = SYSTEM_ROLE
     prompt_template = TPL_PROMPT
@@ -166,7 +166,7 @@ def gpt_4o_infer(paper):
     with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
         for line in file_txt:
             guidelines += line
-    with open("../../datasets/prompts/few_shots_Llama31.txt", 'r', encoding='utf-8') as file_txt:
+    with open(f"../../datasets/prompts/few_shots_Llama31_{prompt_number}.txt", 'r', encoding='utf-8') as file_txt:
         for line in file_txt:
             few_shots += line
 
@@ -187,6 +187,7 @@ def gpt_4o_infer(paper):
                             f"\n"\
                             f"# OUTPUT: \n"
         
+
         client = OpenAI(api_key = OPENAI_APIKEY)
         completion = client.chat.completions.create(
             model = "gpt-4o-mini",
@@ -210,9 +211,9 @@ def gpt_4o_infer(paper):
 
 
 
-def llama_31_infer(paper):
-    print("* llama 3.1 is inferring")
-    tmp = extract(SYSTEM_ROLE, TPL_PROMPT, paper)
+def llama_31_infer(paper, prompt_number:int):
+    # print("* llama 3.1 is inferring")
+    tmp = extract(SYSTEM_ROLE, TPL_PROMPT, paper, prompt_number)
     if tmp is None:
         # no software names found or error
         result = {'software': []}
@@ -238,13 +239,17 @@ def llama_31_infer(paper):
 
 #%%
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--model', type=str, default='llama31', help='Use different models to infer')
+    parser.add_argument('-pn', '--prompt_number', type=int, default=8, help='Number of few shots')
+    args = parser.parse_args()
+
+    
     # 训练+测试集数据
     train_folder_path = "../../datasets/train_data"
     test_folder_path = "../../datasets/test_gold"
     train_files = sorted(os.listdir(train_folder_path))
     test_files = sorted(os.listdir(test_folder_path))
-
-
     # 所有的train+test data
     train_path="../../datasets/train_data/"
     test_path="../../datasets/test_gold/"
@@ -297,6 +302,7 @@ if __name__ == "__main__":
                     txt_with_index_content.append((cur_index, item))
                     cur_index = cur_index + len(item) + 1
 
+
         # ------ ann文件 ------ #
         current_gold_list = list()
         current_gold_dict = dict()
@@ -330,12 +336,12 @@ if __name__ == "__main__":
             men_index = item[0]
             men_name = item[1]
             if (flag == False) & (men_index in current_gold_dict.keys()): # matched! & B
-                gold_current_label.append("B")
+                gold_current_label.append("B-SWN")
                 flag = True
                 last_index = current_gold_dict[men_index][0]
             elif flag == True: # matched! & I
                 if men_index <= last_index:
-                    gold_current_label.append("I")
+                    gold_current_label.append("I-SWN")
                 else: # end match & O
                     gold_current_label.append("O")
                     flag = False
@@ -344,33 +350,44 @@ if __name__ == "__main__":
                 
 
 
-        # -- 两模型infer -- #
-        pred_llama_entities = llama_31_infer(current_paper) # 在函数内把current_paper给改了，把title加到了abstract上
-        # pred_gpt4o_entities = gpt_4o_infer(current_paper) # 在函数内把current_paper给改了，把title加到了abstract上
-        
-        # -- pred：两模型生成bio list -- #
-        pred_llama_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_llama_entities["software"])
-        # pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"])
-        llama_all_pred += pred_llama_bio_list
-        
-        # gpt4o_all_pred += pred_gpt4o_bio_list
-        
-        #  -- gold：ann的bio list -- #
-        all_gold += gold_current_label
-        
+        # --- 两模型infer --- #
+        # - llama 3.1 infer - #
+        if args.model == "llama31":
+            pred_llama_entities = llama_31_infer(current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
+            pred_llama_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_llama_entities["software"], model = "llama31")
+            llama_all_pred += pred_llama_bio_list
+            all_gold += gold_current_label
+            assert(len(pred_llama_bio_list) == len(gold_current_label))
+        elif args.model == "gpt4omini":
+            # - gpt-4o mini infer - # 
+            pred_gpt4o_entities = gpt_4o_infer(current_paper, args.prompt_number) # 在函数内把current_paper给改了，把title加到了abstract上
+            pred_gpt4o_bio_list = convert_txt_to_bio(current_paper["abstract"], pred_gpt4o_entities["software"], model="gpt4omini")
+            gpt4o_all_pred += pred_gpt4o_bio_list
+            all_gold += gold_current_label
 
-        assert(len(pred_llama_bio_list) == len(gold_current_label))
+            assert(len(pred_gpt4o_bio_list) == len(gold_current_label))
+
+
 #%%
-    print("Lenient metric")
-    llama_metrics = classification_report(tags_true=all_gold, tags_pred=llama_all_pred, mode="lenient", verbose=True) # for lenient match
-    print("The result of LLaMA3.1 is", dict(llama_metrics))
-    print("Strict metric")
-    llama_metrics = classification_report(tags_true=all_gold, tags_pred=llama_all_pred, mode="strict", verbose=True)
-    print("The result of LLaMA3.1 is", dict(llama_metrics))
-    
-    # gpt4o_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="lenient") # for lenient match
-    # "lenient", "strict"
-    # print("The result of Gpt-4o is", gpt4o_metrics)
+    print(f"Current configuration are, model: {args.model}, prompt number: {args.prompt_number}")
+
+    if args.model == "llama31":
+        
+        print("Lenient metric")
+        llama_metrics = classification_report(tags_true=all_gold, tags_pred=llama_all_pred, mode="lenient", verbose=True) # for lenient match
+        print("The result of LLaMA3.1 is", dict(llama_metrics))
+        print("Strict metric")
+        llama_metrics = classification_report(tags_true=all_gold, tags_pred=llama_all_pred, mode="strict", verbose=True)
+        print("The result of LLaMA3.1 is", dict(llama_metrics))
+
+    elif args.model == "gpt4omini":
+
+        print("Lenient metric")
+        llama_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="lenient", verbose=True) # for lenient match
+        print("The result of GPT-4o mini is", dict(llama_metrics))
+        print("Strict metric")
+        llama_metrics = classification_report(tags_true=all_gold, tags_pred=gpt4o_all_pred, mode="strict", verbose=True)
+        print("The result of GPT-4o mini is", dict(llama_metrics))
     
         
         

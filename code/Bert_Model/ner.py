@@ -20,12 +20,24 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from tensorboardX import SummaryWriter
 
-from code.Bert_Model.utils import NerProcessor, convert_examples_to_features, get_Dataset
+from utils import NerProcessor, convert_examples_to_features, get_Dataset
 # from models import BERT_BiLSTM_CRF
-import code.Bert_Model.conlleval as conlleval
+import conlleval as conlleval
 
 # from transformers import (WEIGHTS_NAME, BertConfig, BertTokenizer)
 from transformers import AdamW, get_linear_schedule_with_warmup
+from dotenv import load_dotenv
+
+
+
+
+# ----------------------- 加载.env文件中的信息 ------------------- #
+load_dotenv()
+PYTHONPATH = os.getenv('PYTHONPATH')
+print(PYTHONPATH)
+sys.path.append(PYTHONPATH)
+from ner_metrics_both import classification_report
+
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +86,7 @@ def boolean_string(s):
         raise ValueError('Not a valid boolean string')
     return s == 'True'
 
+
 def evaluate(args, data, model, id2label, all_ori_tokens):
     model.eval()
     sampler = SequentialSampler(data)
@@ -94,14 +107,10 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
 
         with torch.no_grad():
 
-            outputs = model(input_ids=input_ids)
+            outputs = model(input_ids = input_ids)
             # 获取预测结果
             logits = outputs.logits
             predictions = torch.argmax(logits, dim=-1)
-
-            # logits = model.predict(input_ids, segment_ids, input_mask)
-            # logits = torch.argmax(F.log_softmax(logits, dim=2), dim=2)
-            # logits = logits.detach().cpu().numpy()
 
         # 原来循环的是logits
         for l in predictions:
@@ -118,12 +127,19 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
             eval_list.append(f"{ot} {ol} {pl}\n")
         eval_list.append("\n")
     
+    print("Lenient")
+    classification_report(tags_true=ori_labels, tags_pred=pred_labels, mode="lenient") # for lenient match
+    print("Strict")
+    classification_report(tags_true=ori_labels, tags_pred=pred_labels, mode="strict") # for strict match
+
     # eval the model 
-    counts = conlleval.evaluate(eval_list)
-    conlleval.report(counts)
+    ###counts = conlleval.evaluate(eval_list)
+    ###conlleval.report(counts)
 
     # namedtuple('Metrics', 'tp fp fn prec rec fscore')
-    overall, by_type = conlleval.metrics(counts)
+    ###overall, by_type = conlleval.metrics(counts)
+    overall = list()
+    by_type = list()
     
     return overall, by_type
 
@@ -185,7 +201,7 @@ def main():
     parser.add_argument("--do_test", default=False, type=boolean_string)
     parser.add_argument("--train_batch_size", default=8, type=int)
     parser.add_argument("--eval_batch_size", default=8, type=int)
-    parser.add_argument("--learning_rate", default=3e-5, type=float)
+    parser.add_argument("--learning_rate", default=2e-5, type=float)
     parser.add_argument("--num_train_epochs", default=10, type=float)
     parser.add_argument("--warmup_proprotion", default=0.1, type=float)
     parser.add_argument("--use_weight", default=1, type=int)
@@ -315,11 +331,7 @@ def main():
         assert vocab_size == embedding_size, "Vocabulary size and embedding size do not match"
         """
 
-
         match_dim_tokenizer_model(tokenizer, model, device)
-
-
-
 
 
         if n_gpu > 1: #【使用多个gpu并行训练！】
@@ -401,11 +413,13 @@ def main():
                 all_ori_tokens_eval = [f.ori_tokens for f in eval_features]
                 overall, by_type = evaluate(args, eval_data, model, id2label, all_ori_tokens_eval)
                 
+
+
                 # add eval result to tensorboard
                 f1_score = overall.fscore
-                writer.add_scalar("Eval/precision", overall.prec, ep)
-                writer.add_scalar("Eval/recall", overall.rec, ep)
-                writer.add_scalar("Eval/f1_score", overall.fscore, ep)
+                ###writer.add_scalar("Eval/precision", overall.prec, ep)
+                ###writer.add_scalar("Eval/recall", overall.rec, ep)
+                ###writer.add_scalar("Eval/f1_score", overall.fscore, ep)
 
                 # save the best performs model
                 if f1_score > best_f1:

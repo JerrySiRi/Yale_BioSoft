@@ -167,3 +167,4 @@ cython_debug/
 models/*/
 
 datasets/*/
+code/Bert_Model/output/*

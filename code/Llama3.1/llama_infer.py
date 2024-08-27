@@ -61,15 +61,7 @@ else:
 
 
 
-# ----------------------- 读取设计好的guidelines ----------------- # 
-guidelines = """"""
-few_shots = """"""
-with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
-    for line in file_txt:
-        guidelines += line
-with open("../../datasets/prompts/few_shots_Llama31.txt", 'r', encoding='utf-8') as file_txt:
-    for line in file_txt:
-        few_shots += line
+
 
 TPL_PROMPT = """
 
@@ -83,10 +75,19 @@ SYSTEM_ROLE = "You are an experienced software developer, data scientist, and re
 
 
 # --- 调用model，进行inference --- #
-def extract(system_role, prompt_template, paper):
+def extract(system_role, prompt_template, paper, prompt_number):
     '''
     Extract something from the abstract of a paper based on the given prompt template.
     '''
+    # ----------------------- 读取设计好的guidelines ----------------- # 
+    guidelines = """"""
+    few_shots = """"""
+    with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
+        for line in file_txt:
+            guidelines += line
+    with open(f"../../datasets/prompts/few_shots_Llama31_{prompt_number}.txt", 'r', encoding='utf-8') as file_txt:
+        for line in file_txt:
+            few_shots += line
     try:
         # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
         # 传入的paper会给键值对

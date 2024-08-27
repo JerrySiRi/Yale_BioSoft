@@ -210,10 +210,6 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
             logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
             logger.info("label_ids: %s" % " ".join([str(x) for x in label_ids]))
 
-        # if not os.path.exists(os.path.join(output_dir, 'label2id.pkl')):
-        #     with open(os.path.join(output_dir, 'label2id.pkl'), 'wb') as w:
-        #         pickle.dump(label_map, w)
-
         features.append(
                 InputFeatures(input_ids=input_ids,
                               input_mask=input_mask,

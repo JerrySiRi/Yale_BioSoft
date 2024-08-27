@@ -131,7 +131,7 @@ if __name__ == "__main__":
     if not HF_TOKEN:
         raise ValueError("Please set your Hugging Face API token as an environment variable named 'HF_TOKEN'.")
 
-    dataset_dict.push_to_hub('YBXL/STN_4shots_1k', token=HF_TOKEN)
+    dataset_dict.push_to_hub('YBXL/STN_8shots_1k', token=HF_TOKEN)
 
 
 

@@ -1,0 +1,1 @@
+python Prompt_train_Infer.py -m gpt4omini -pn 8
