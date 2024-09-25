@@ -18,13 +18,14 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
 from torch.utils.data.distributed import DistributedSampler
 
 from tqdm import tqdm, trange
-from tensorboardX import SummaryWriter
+
+#from tensorboardX import SummaryWriter
 
 from utils import NerProcessor, convert_examples_to_features, get_Dataset
 # from models import BERT_BiLSTM_CRF
 import conlleval as conlleval
 
-# from transformers import (WEIGHTS_NAME, BertConfig, BertTokenizer)
+from transformers import (WEIGHTS_NAME, BertConfig, BertTokenizer)
 from transformers import AdamW, get_linear_schedule_with_warmup
 from dotenv import load_dotenv
 
@@ -288,7 +289,7 @@ def main():
     if not os.path.exists(os.path.join(args.output_dir, "eval")):
         os.makedirs(os.path.join(args.output_dir, "eval"))
     
-    writer = SummaryWriter(logdir=os.path.join(args.output_dir, "eval"), comment="Linear")
+    # writer = SummaryWriter(logdir=os.path.join(args.output_dir, "eval"), comment="Linear")
 
     processor = NerProcessor()
     label_list = processor.get_labels(args)
@@ -421,7 +422,7 @@ def main():
                     
                     if args.logging_steps > 0 and global_step % args.logging_steps == 0:
                         tr_loss_avg = (tr_loss-logging_loss)/args.logging_steps
-                        writer.add_scalar("Train/loss", tr_loss_avg, global_step)
+                        # writer.add_scalar("Train/loss", tr_loss_avg, global_step)
                         logging_loss = tr_loss
             
             if args.do_eval:
@@ -450,7 +451,7 @@ def main():
 
             # logger.info(f'epoch {ep}, train loss: {tr_loss}')
         # writer.add_graph(model)
-        writer.close()
+        # writer.close()
 
         # model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
         # model_to_save.save_pretrained(args.output_dir)
