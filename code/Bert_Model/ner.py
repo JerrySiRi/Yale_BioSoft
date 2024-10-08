@@ -312,7 +312,7 @@ def main():
 # tokenizer、model、数据集获取方式 & 处理方式
 # 问chatgpt：本地数据集分为data和label，如何用hugging face 模型的api进行处理
 
-    from transformers import AutoTokenizer, AutoModelForTokenClassification
+    from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
 
     if args.do_train:
 

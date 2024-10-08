@@ -5,13 +5,13 @@ import pandas
 
 
 
-def convert_files_to_txt(folder_path, output_file):
+def convert_files_to_txt(folder_path, output_file, pattern):
 
     files = sorted(os.listdir(folder_path))
     txt_files = [f for f in files if f.endswith('.txt')]
 
-    txt_train = [txt_files[index] for index in range(0,int(0.9*len(txt_files)))]
-    txt_dev = [txt_files[index] for index in range(int(0.9*len(txt_files))+1, len(txt_files))]
+    txt_train = [txt_files[index] for index in range(0,int(0.90*len(txt_files)))]
+    txt_dev = [txt_files[index] for index in range(int(0.90*len(txt_files))+1, len(txt_files))]
 
     # ann_files = [f for f in files if f.endswith('.ann')]
 
@@ -19,11 +19,22 @@ def convert_files_to_txt(folder_path, output_file):
     taged_test_name = output_file + "/BIO_test.txt"
     taged_dev_name = output_file +"/BIO_dev.txt"
 
+    different_pattern_files = {
+        "train": txt_train,
+        "dev": txt_dev,
+        "test": txt_files
+    }
 
-    with open(taged_dev_name, "w", encoding="utf-8") as taged: # Use writelines to write list
+    different_pattern_folder = {
+        "train": taged_train_name,
+        "dev": taged_dev_name,
+        "test": taged_test_name
+    }
+
+    with open(different_pattern_folder[pattern], "w", encoding="utf-8") as taged: # Use writelines to write list
         
-        txt_files = txt_dev
-
+        txt_files = different_pattern_files[pattern]
+        count = 0
         # Process .txt & .ann files
         for txt in txt_files:
 
@@ -46,8 +57,14 @@ def convert_files_to_txt(folder_path, output_file):
                 # print(txt_with_index_content) 
 
                 with open(os.path.join(folder_path, ann), 'r', encoding='utf-8') as file_ann:
+                    # print(ann)
                     for line in file_ann:
+                        
                         current_mes = line.strip().split("\t")
+                        # print("===", current_mes)
+                        if len(current_mes)!=3: 
+                            count += 1 
+                            continue
                         index_initial = current_mes[1].strip().split(" ")
                         if len(index_initial) == 3:
                             index = (int(index_initial[1]), int(index_initial[2]))
@@ -89,9 +106,10 @@ def convert_files_to_txt(folder_path, output_file):
                         BIO_taged.append("\n")
                 
             taged.writelines(BIO_taged)
-            taged.writelines(["\n"])      
+            taged.writelines(["\n"])    
+    print("Unrecognized count", count)
 
     
 
 if __name__ == "__main__":
-    convert_files_to_txt("../../train_data", "../../preprocessed_data")
+    convert_files_to_txt("../../datasets/train_data", "../../datasets/preprocessed_data", "dev")
