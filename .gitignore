@@ -168,3 +168,5 @@ models/*/
 
 datasets/*/
 code/Bert_Model/output/*
+
+datasets/clamp-api-demo-1.0.0-SNAPSHOT.jar
