@@ -46,29 +46,6 @@ logger = logging.getLogger(__name__)
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
-"""
-python ner.py --do_train True --do_eval True --do_test False --max_seq_length 256 --train_file ../preprocessed_data/BIO_train.txt --eval_file ../preprocessed_data/BIO_dev.txt --test_file ../preprocessed_data/BIO_test.txt --train_batch_size 8 --eval_batch_size 8 --num_train_epochs 10 --do_lower_case --logging_steps 200 --need_birnn True --rnn_dim 256 --clean True --output_dir ../output
-
-"""
-
-"""
-HF Medical-NER
-
-# Method 1: Use subset of AutoModel
-# Load model directly
-from transformers import AutoTokenizer, AutoModelForTokenClassification
-
-tokenizer = AutoTokenizer.from_pretrained("Clinical-AI-Apollo/Medical-NER")
-model = AutoModelForTokenClassification.from_pretrained("Clinical-AI-Apollo/Medical-NER")
-
-------------------------------------------------------------------------------------------------
-
-# Method 2: Use Pipeline
-from transformers import pipeline
-
-pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER")
-
-"""
 
 
 # set the random seed for repeat
@@ -312,7 +289,8 @@ def main():
 # tokenizer、model、数据集获取方式 & 处理方式
 # 问chatgpt：本地数据集分为data和label，如何用hugging face 模型的api进行处理
 
-    from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
+    from transformers import AutoTokenizer, AutoModelForTokenClassification, \
+                            TrainingArguments, Trainer, AutoConfig
 
     if args.do_train:
 
@@ -331,9 +309,30 @@ def main():
                     is_split_into_words=True, 
                     return_tensors="pt")
 
-        model = AutoModelForTokenClassification.from_pretrained("Clinical-AI-Apollo/Medical-NER", 
-                    num_labels=num_labels,
-                    ignore_mismatched_sizes=True)
+        # preassigned hyper-parameter
+        config = AutoConfig.from_pretrained(
+            "Clinical-AI-Apollo/Medical-NER", 
+            # hidden_size=768,       
+            # num_attention_heads=12, 
+            # num_hidden_layers=12,   
+            # intermediate_size=3072, 
+            hidden_dropout_prob=0.1, # hidden layer dropout pro
+            attention_probs_dropout_prob=0.1, # attention dropout pro
+            # max_position_embeddings=512,      
+            # type_vocab_size=2,        # 词汇类型嵌入大小 (用于 token 类型嵌入)
+            # initializer_range=0.02,   # 参数初始化范围
+            layer_norm_eps=1e-12,     # 层归一化 epsilon 值
+            output_attentions=False,  # 是否输出注意力权重
+            output_hidden_states=False, # 是否输出隐藏层状态
+            num_labels = 3,             # 分类任务中的标签数
+            id2label={0: 'O', 1: 'B', 2: 'I'},  
+            label2id={'O': 0, 'B': 1, 'I': 2}, 
+        )
+
+        # Use predefined parameters 
+        model = AutoModelForTokenClassification.from_pretrained("Clinical-AI-Apollo/Medical-NER", \
+                                                                config=config, ignore_mismatched_sizes = True)
+
         """
         model.to(device)
         # 获取分词器的词汇表大小

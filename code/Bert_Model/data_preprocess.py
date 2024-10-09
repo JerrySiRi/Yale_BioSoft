@@ -10,8 +10,8 @@ def convert_files_to_txt(folder_path, output_file, pattern):
     files = sorted(os.listdir(folder_path))
     txt_files = [f for f in files if f.endswith('.txt')]
 
-    txt_train = [txt_files[index] for index in range(0,int(0.90*len(txt_files)))]
-    txt_dev = [txt_files[index] for index in range(int(0.90*len(txt_files))+1, len(txt_files))]
+    txt_train = [txt_files[index] for index in range(0,int(0.9*len(txt_files)))]
+    txt_dev = [txt_files[index] for index in range(int(0.9*len(txt_files))+1, len(txt_files))]
 
     # ann_files = [f for f in files if f.endswith('.ann')]
 
@@ -112,4 +112,4 @@ def convert_files_to_txt(folder_path, output_file, pattern):
     
 
 if __name__ == "__main__":
-    convert_files_to_txt("../../datasets/train_data", "../../datasets/preprocessed_data", "dev")
+    convert_files_to_txt("../../datasets/test_gold", "../../datasets/preprocessed_data", "test")
