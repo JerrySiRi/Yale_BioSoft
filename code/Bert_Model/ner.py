@@ -303,6 +303,17 @@ def main():
                 need_birnn=args.need_birnn, rnn_dim=args.rnn_dim)
         
         """
+        # set random seed
+        def set_seed(seed):
+            random.seed(seed)
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)  # multiple GPU
+
+        # Use set seed
+        # seed = 42
+        # set_seed(seed)
+
         tokenizer = AutoTokenizer.from_pretrained("Clinical-AI-Apollo/Medical-NER",
                     truncation=True, 
                     padding=True, 
@@ -316,22 +327,23 @@ def main():
             # num_attention_heads=12, 
             # num_hidden_layers=12,   
             # intermediate_size=3072, 
-            hidden_dropout_prob=0.1, # hidden layer dropout pro
-            attention_probs_dropout_prob=0.1, # attention dropout pro
+            # hidden_dropout_prob=0.1, # hidden layer dropout pro
+            # attention_probs_dropout_prob=0.1, # attention dropout pro
             # max_position_embeddings=512,      
             # type_vocab_size=2,        # 词汇类型嵌入大小 (用于 token 类型嵌入)
             # initializer_range=0.02,   # 参数初始化范围
-            layer_norm_eps=1e-12,     # 层归一化 epsilon 值
+            # layer_norm_eps=1e-12,     # 层归一化 epsilon 值
             output_attentions=False,  # 是否输出注意力权重
             output_hidden_states=False, # 是否输出隐藏层状态
-            num_labels = 3,             # 分类任务中的标签数
+            num_labels = 3,             
             id2label={0: 'O', 1: 'B', 2: 'I'},  
             label2id={'O': 0, 'B': 1, 'I': 2}, 
         )
 
         # Use predefined parameters 
         model = AutoModelForTokenClassification.from_pretrained("Clinical-AI-Apollo/Medical-NER", \
-                                                                config=config, ignore_mismatched_sizes = True)
+                                                                config = config, \
+                                                                ignore_mismatched_sizes = True)
 
         """
         model.to(device)
