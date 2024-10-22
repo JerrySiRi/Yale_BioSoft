@@ -75,7 +75,7 @@ SYSTEM_ROLE = "You are an experienced software developer, data scientist, and re
 
 
 # --- 调用model，进行inference --- #
-def extract(system_role, prompt_template, paper, prompt_number):
+def extract(system_role, prompt_template, paper, shots_number):
     '''
     Extract something from the abstract of a paper based on the given prompt template.
     '''
@@ -85,7 +85,7 @@ def extract(system_role, prompt_template, paper, prompt_number):
     with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
         for line in file_txt:
             guidelines += line
-    with open(f"../../datasets/prompts/few_shots_Llama31_{prompt_number}.txt", 'r', encoding='utf-8') as file_txt:
+    with open(f"../../datasets/prompts/few_shots_Llama31_{shots_number}.txt", 'r', encoding='utf-8') as file_txt:
         for line in file_txt:
             few_shots += line
     try:
@@ -187,7 +187,7 @@ def get_contexts(entities, paper):
 
 
 # --- 单篇文章 抽取 & 保存到数据库 --- #
-def extract_and_save_to_db(paper, flag_force_update=False):
+def extract_and_save_to_db(paper, flag_force_update=False, shots_number = 16):
     '''
     Extract software names from the given paper and save the result to the database.
     
@@ -213,7 +213,7 @@ def extract_and_save_to_db(paper, flag_force_update=False):
 
     # not found, extract the software names
     # extract using the openai model
-    tmp = extract(SYSTEM_ROLE, TPL_PROMPT, paper)
+    tmp = extract(SYSTEM_ROLE, TPL_PROMPT, paper, shots_number)
 
     if tmp is None:
         # no software names found or error
@@ -303,7 +303,7 @@ def upload_hugging_face(data, start_year, end_year, each_year_sample_size):
     if not HF_TOKEN:
         raise ValueError("Please set your Hugging Face API token as an environment variable named 'HF_TOKEN'.")
 
-    dataset_dict.push_to_hub(f'YBXL/SWN_LLama3.1_{start_year}_{end_year}_{each_year_sample_size}', token=HF_TOKEN)
+    dataset_dict.push_to_hub(f'JerrySiRi/SWN_LLama3.1_{start_year}_{end_year}_{each_year_sample_size}', token=HF_TOKEN)
 
 
 # --- 总抽取函数 --- # 
@@ -314,6 +314,7 @@ def extract_and_save_samples(
     start_year = 2010,
     end_year = 2023,
     main_run = True,
+    shots_number = 16
 ):
     '''
     Extract software names from all papers in the database.
@@ -392,20 +393,20 @@ def extract_and_save_samples(
     for i, row in tqdm(df.iterrows(), total=total):
         count += 1
         # create a new paper for extraction
-        paper = {
+        cur_paper = {
             'pmid': row['pmid'],
             'title': row['title'],
             'pubdate': row["pubdate"],
             'abstract': row['abstract']
         }
         
-        current = extract_and_save_to_db(paper)
+        current = extract_and_save_to_db(cur_paper, shots_number)
         data.append(current)
         if count >= one_third_point and count < one_third_point + 1:
-            send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_in each year", \
+            send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_shots:{shots_number} in each year", \
                        "Inference reached first one_third_point!")
         elif count >= 2*one_third_point and count < 2*one_third_point + 1:
-            send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_in each year", \
+            send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_shots:{shots_number} in each year", \
                        "Inference reached second one_third_point!")
 
         # in case sending too many requests
@@ -438,6 +439,7 @@ if __name__ == '__main__':
     # 永真式，不需要就没用，需要再改
     parser.add_argument('--start_year', type=str, default='2009', help='The start year of papers to extract')
     parser.add_argument('--end_year', type=str, default='2023', help='The end year of papers to extract')
+    parser.add_argument('--shots_number', type=int, default=16, help='In-context shots. Choice: 4, 8, 16')
     
 
     args = parser.parse_args()
@@ -455,7 +457,8 @@ if __name__ == '__main__':
             sample_size = args.each_year_sample_size,
             pmid_filter = args.pmid_filter,
             start_year = args.start_year,
-            end_year = args.end_year
+            end_year = args.end_year,
+            shots_number = args.shots_number
         )
 
     else:

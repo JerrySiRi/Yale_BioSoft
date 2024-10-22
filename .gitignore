@@ -170,3 +170,4 @@ datasets/*/
 code/Bert_Model/output/*
 
 datasets/clamp-api-demo-1.0.0-SNAPSHOT.jar
+code/Llama 3.1_8B/database
