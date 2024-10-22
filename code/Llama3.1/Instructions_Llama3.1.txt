@@ -1,2 +1,0 @@
-python llama_infer.py extract --each_year_sample_size 15000 --start_year 2014 --end_year 2018
-python llama_infer.py extract --each_year_sample_size 15000 --start_year 2019 --end_year 2023
