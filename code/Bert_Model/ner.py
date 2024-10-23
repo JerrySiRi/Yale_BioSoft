@@ -1,35 +1,30 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
-import csv
 import logging
 import os
 import random
 import json
 import sys
-import datetime
-import time
 import numpy as np
 import torch
 import torch.nn.functional as F
 import pickle
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
+                             TensorDataset)
 from torch.utils.data.distributed import DistributedSampler
-
 from tqdm import tqdm, trange
-
 #from tensorboardX import SummaryWriter
-
 from utils import NerProcessor, convert_examples_to_features, get_Dataset
 # from models import BERT_BiLSTM_CRF
 import conlleval as conlleval
-
 from transformers import (WEIGHTS_NAME, BertConfig, BertTokenizer)
 from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import AutoTokenizer, AutoModelForTokenClassification, \
+                            TrainingArguments, Trainer, AutoConfig
 from dotenv import load_dotenv
 
-
+from ner_metrics_both import classification_report
 
 
 # ----------------------- 加载.env文件中的信息 ------------------- #
@@ -37,8 +32,6 @@ load_dotenv()
 PYTHONPATH = os.getenv('PYTHONPATH')
 print(PYTHONPATH)
 sys.path.append(PYTHONPATH)
-from ner_metrics_both import classification_report
-
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +41,7 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
 
-# set the random seed for repeat
+# --- set the random seed for repeat --- #
 def set_seed(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -285,12 +278,9 @@ def main():
 
     # Prepare optimizer and schedule (linear warmup and decay)
 
-# TODO:【【【【【【【【【【【【【【【更改！】】】】】】】】】】】】】】】】】】】】】】】
-# tokenizer、model、数据集获取方式 & 处理方式
-# 问chatgpt：本地数据集分为data和label，如何用hugging face 模型的api进行处理
+# ---【更改！】 --- #
 
-    from transformers import AutoTokenizer, AutoModelForTokenClassification, \
-                            TrainingArguments, Trainer, AutoConfig
+
 
     if args.do_train:
 
