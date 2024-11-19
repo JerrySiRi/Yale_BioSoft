@@ -39,15 +39,11 @@ logger = logging.getLogger(__name__)
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
-
-
 # --- set the random seed for repeat --- #
 def set_seed(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
 
 def to_list(tensor):
     return tensor.detach().cpu().tolist()
@@ -69,6 +65,7 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
     pred_labels = []
     ori_labels = []
 
+
     for b_i, (input_ids, input_mask, segment_ids, label_ids) in enumerate(tqdm(dataloader, desc="Evaluating")):
         
         input_ids = input_ids.to(args.device)
@@ -77,19 +74,17 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
         label_ids = label_ids.to(args.device)
 
         with torch.no_grad():
-
-            outputs = model(input_ids = input_ids)
-            # 获取预测结果
+            outputs = model(input_ids)
             logits = outputs.logits
             predictions = torch.argmax(logits, dim=-1)
 
         # 原来循环的是logits
         for l in predictions:
             pred_labels.append([id2label[int(idx)] for idx in l])
-        
         for l in label_ids:
             ori_labels.append([id2label[int(idx.item())] for idx in l])
     
+
     eval_list = []
     for ori_tokens, oril, prel in zip(all_ori_tokens, ori_labels, pred_labels):
         for ot, ol, pl in zip(ori_tokens, oril, prel):
@@ -98,54 +93,43 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
             eval_list.append(f"{ot} {ol} {pl}\n")
         eval_list.append("\n")
     
-    full_ori_labels = list()
-    full_pred_labels = list()
 
-    # 去掉末尾padding的I
-    for index in range(0, len(ori_labels)):
-        valid_index = len(ori_labels)
-        while valid_index > 0 and ori_labels[index][valid_index - 1] == "I":
-            valid_index -= 1
-        full_ori_labels.extend(ori_labels[index][:valid_index])
-        full_pred_labels.extend(pred_labels[index][:valid_index])
-    print(full_ori_labels[:256])
-    print(full_pred_labels[:256])
-    print("Lenient")
-    lenient_metrics = classification_report(tags_true=full_ori_labels, tags_pred=full_pred_labels, mode="lenient") # for lenient match
+    print("--- Pred Labels --- \n")
+    print(pred_labels)
+
+
+    print("\n --- Lenient --- \n")
+    lenient_metrics = classification_report(tags_true=ori_labels, tags_pred=pred_labels, mode="lenient") # for lenient match
     print(lenient_metrics)
-    print("Strict")
-    strict_metrics = classification_report(tags_true=full_ori_labels, tags_pred=full_pred_labels, mode="strict") # for strict match
+    print("\n --- Strict --- \n")
+    strict_metrics = classification_report(tags_true=ori_labels, tags_pred=pred_labels, mode="strict") # for strict match
     print(strict_metrics)
 
     # eval the model 
-    ###counts = conlleval.evaluate(eval_list)
-    ###conlleval.report(counts)
+    ### counts = conlleval.evaluate(eval_list)
+    ### conlleval.report(counts)
 
     # namedtuple('Metrics', 'tp fp fn prec rec fscore')
-    ###overall, by_type = conlleval.metrics(counts)    
-    ###return overall, by_type
-    print("&"*10,dict(lenient_metrics["default"]).keys)
+    ### overall, by_type = conlleval.metrics(counts)    
+    ### return overall, by_type
+
+    print("&"*10, dict(lenient_metrics["default"]).keys)
     return dict(lenient_metrics["default"]), list()
 
 
 
-
-
 def match_dim_tokenizer_model(tokenizer, model, device):
-    # tokenizer的词汇表大小
+        
+        # tokenizer的词汇表大小
         vocab_size = len(tokenizer)
-
         # 获取当前的词嵌入层
         original_embeddings = model.get_input_embeddings()
-
         # 获取当前的词嵌入层的大小
         original_vocab_size, embedding_dim = original_embeddings.weight.size()
-
         # 如果分词器的词汇表大小与模型的词嵌入层大小不匹配，调整词嵌入层
         if vocab_size != original_vocab_size:
             print(f"Adjusting embedding layer from size {original_vocab_size} to {vocab_size}")
             new_embeddings = torch.nn.Embedding(vocab_size, embedding_dim)
-
         # 复制原有的词嵌入矩阵到新的词嵌入矩阵
         if vocab_size < original_vocab_size: # tokenizer的词矩阵更小
             with torch.no_grad():
@@ -158,7 +142,6 @@ def match_dim_tokenizer_model(tokenizer, model, device):
 
         # 调整模型的词嵌入层
         model.resize_token_embeddings(vocab_size)
-
         model.to(device)
         # tokenizer.to(device)
 
@@ -195,7 +178,7 @@ def main():
     parser.add_argument("--warmup_proprotion", default=0.1, type=float)
     parser.add_argument("--use_weight", default=1, type=int)
     parser.add_argument("--local_rank", type=int, default=-1)
-    parser.add_argument("--seed", type=int, default=2024)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--fp16", default=False)
     parser.add_argument("--loss_scale", type=float, default=0)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
@@ -205,6 +188,7 @@ def main():
     parser.add_argument("--do_lower_case", action='store_true')
     parser.add_argument("--logging_steps", default=500, type=int)
     parser.add_argument("--clean", default=False, type=boolean_string, help="clean the output dir")
+    parser.add_argument("--push_hf", default=False, type=boolean_string, help="clean the output dir")
 
 
     parser.add_argument("--need_birnn", default=False, type=boolean_string)
@@ -217,6 +201,7 @@ def main():
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_
     args.device = device
     n_gpu = torch.cuda.device_count()
+    set_seed(args)
 
     logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -  %(message)s',
                         datefmt = '%m/%d/%Y %H:%M:%S',
@@ -292,18 +277,6 @@ def main():
         model = BERT_BiLSTM_CRF.from_pretrained(args.model_name_or_path, config=config, 
                 need_birnn=args.need_birnn, rnn_dim=args.rnn_dim)
         """
-        # set random seed -- meaningless in fine-tune Bert model
-        """
-        def set_seed(seed):
-            random.seed(seed)
-            np.random.seed(seed)
-            torch.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)  # multiple GPU
-
-        # Use set seed
-        # seed = 42
-        # set_seed(seed)
-        """
         
         # use huggingface model, which is (pre) fine-tuned on Medical Entities with NER tasks
         tokenizer = AutoTokenizer.from_pretrained("Clinical-AI-Apollo/Medical-NER",
@@ -337,19 +310,9 @@ def main():
                                                                 config = config, \
                                                                 ignore_mismatched_sizes = True)
         
-        # ----- fix bug with unmatched the dimension of hidden layer ----- #
+        # ----- fix bug with unmatched dimension between tokenizer and model ----- #
         match_dim_tokenizer_model(tokenizer, model, device)
-        """
-        model.to(device)
-        # 获取分词器的词汇表大小
-        vocab_size = len(tokenizer)
-        print(f"Vocabulary size: {vocab_size}")
-        # 获取模型的嵌入层大小
-        embedding_size = model.get_input_embeddings().weight.size(0)
-        print(f"Embedding size: {embedding_size}")
-        # 确保词汇表大小与嵌入层大小一致
-        assert vocab_size == embedding_size, "Vocabulary size and embedding size do not match"
-        """
+
 
         if n_gpu > 1: #【使用多个gpu并行训练！】
             model = torch.nn.DataParallel(model)
@@ -439,25 +402,26 @@ def main():
                     logger.info(f"\n----------the best f1 is ---------\n{f1_score}")
                     best_f1 = f1_score
 
-                    # --- save in disk --- #
-                    model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-                    model_to_save.save_pretrained(args.output_dir, save_config=True) # 把模型保存到指定文件夹
-                    tokenizer.save_pretrained(args.output_dir)
+                    assert model.config.vocab_size == len(tokenizer)
 
-                    # --- save in huggingface --- #
-                    model.push_to_hub("JerrySiRi/SWN_Biomedical_NER_Bert", tokenizer, save_method = "merged_16bit", token = "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")
-                    tokenizer.push_to_hub("JerrySiRi/SWN_Biomedical_NER_Bert", token = "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")
+                    if args.push_hf == True:
+                        
+                        # --- save in disk --- #
+                        save_path = str(args.output_dir)+"/model"
+                        model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
+                        model_to_save.save_pretrained(save_path, save_config=True) # 把模型保存到指定文件夹
+                        tokenizer.save_pretrained(save_path)
 
-                    # Good practice: save your training arguments together with the trained model
-                    torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
+                        # --- save in huggingface --- #
+                        model.push_to_hub("JerrySiRi/SWN_Biomedical_NER_Bert", tokenizer, save_method = "merged_16bit", token = "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")
+                        tokenizer.push_to_hub("JerrySiRi/SWN_Biomedical_NER_Bert", token = "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")
 
-            # logger.info(f'epoch {ep}, train loss: {tr_loss}')
+                        # Good practice: save your training arguments together with the trained model
+                        torch.save(args, os.path.join(save_path, 'training_args.bin'))
+
+            logger.info(f'epoch {ep}, train loss: {tr_loss}')
         # writer.add_graph(model)
         # writer.close()
-
-        # model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
-        # model_to_save.save_pretrained(args.output_dir)
-        # tokenizer.save_pretrained(args.output_dir)
 
 
 
@@ -465,14 +429,34 @@ def main():
     # ----------- Testing Phase ----------- #
 
     if args.do_test:
+        def model_tokenizer_test(input_ids, tokenizer, model):
+            if (input_ids.max() > model.config.vocab_size) or \
+                (label_ids.max() > model.config.label2id) or \
+                (tokenizer.vocab_size != model.config.vocab_size):
+                print("Unmatched tokenizer and model embedding dimension")
+                return False
+            else:
+                return True
+            """
+            # 检查 input_ids 是否有非法值
+            print(input_ids.max(), input_ids.min())
+            # 对于分类问题，检查 labels 是否超出标签范围
+            print(label_ids.max(), label_ids.min())
+            # 检查输入数据的形状
+            print(input_ids.shape)  # 应该是 (batch_size, sequence_length)
+            # 确保分词器和模型一致
+            assert tokenizer.vocab_size == model.config.vocab_size, "词汇表大小不匹配！"
+            """
+        
+
         # model = BertForTokenClassification.from_pretrained(args.output_dir)
         # model.to(device)
         # tokenizer = BertTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         # args = torch.load(os.path.join(args.output_dir, 'training_args.bin'))
         # model = BERT_BiLSTM_CRF.from_pretrained(args.output_dir, need_birnn=args.need_birnn, rnn_dim=args.rnn_dim)
 
+        # label_map = {i : label for i, label in enumerate(label_list)}
 
-        label_map = {i : label for i, label in enumerate(label_list)}
 
         # --- Method 1: load model from disk --- #
 
@@ -489,10 +473,29 @@ def main():
                     padding=True, 
                     is_split_into_words=True, 
                     return_tensors="pt")
+        config = AutoConfig.from_pretrained(
+            "JerrySiRi/SWN_Biomedical_NER_Bert", 
+            # hidden_size=768,       
+            # num_attention_heads=12, 
+            # num_hidden_layers=12,   
+            # intermediate_size=3072, 
+            # hidden_dropout_prob=0.1, # hidden layer dropout pro
+            # attention_probs_dropout_prob=0.1, # attention dropout pro
+            # max_position_embeddings=512,      
+            # type_vocab_size=2,        # 词汇类型嵌入大小 (用于 token 类型嵌入)
+            # initializer_range=0.02,   # 参数初始化范围
+            # layer_norm_eps=1e-12,     # 层归一化 epsilon 值
+            output_attentions=False,  # 是否输出注意力权重
+            output_hidden_states=False, # 是否输出隐藏层状态
+            num_labels = 3,             
+            id2label={0: 'O', 1: 'B', 2: 'I'},  
+            label2id={'O': 0, 'B': 1, 'I': 2}, 
+        )
         model = AutoModelForTokenClassification.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert", \
                                                                 config = config, \
                                                                 ignore_mismatched_sizes = True)
-
+        
+        model.to(device)
         test_examples, test_features, test_data = get_Dataset(args, processor, tokenizer, mode="test")
 
         logger.info("***** Running test *****")
@@ -505,35 +508,65 @@ def main():
         test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
         model.eval()
 
-        pred_labels = []
+        pred_labels = []  
+        # if model_tokenizer_test(input_ids, tokenizer, model) == False: 
+
+        # BUG BUG BUG：重新给他了一个新的embedding层，没有用原始fine-tune过的！！！    
+        match_dim_tokenizer_model(tokenizer, model, device)
+
+        # ------ Inference Method 1: pipeline ----- #
+        """
+        from transformers import pipeline
+        pipe = pipeline("token-classification", model="JerrySiRi/SWN_Biomedical_NER_Bert", aggregation_strategy='simple')
+        result = pipe('45 year old woman diagnosed with CAD')
+        print("--- result ---")
+        print(result)
+        """
         
+
+        # ----- Inference Method 2: Use token_ids ----- #
+        # CRF和Bert结合在一起了，此时model的输出结果是一个个的tensor，取max的就行
+
         for b_i, (input_ids, input_mask, segment_ids, label_ids) in enumerate(tqdm(test_dataloader, desc="Predicting")):
-            
             input_ids = input_ids.to(device)
             input_mask = input_mask.to(device)
             segment_ids = segment_ids.to(device)
             label_ids = label_ids.to(device)
 
+            # test_dataloader是batch化过的啦
             with torch.no_grad():
-                logits = model.predict(input_ids, segment_ids, input_mask)
-            # logits = torch.argmax(F.log_softmax(logits, dim=2), dim=2)
-            # logits = logits.detach().cpu().numpy()
+                print(input_ids[0], segment_ids[0], input_mask[0])
+                outputs = model(input_ids, segment_ids, input_mask)
 
-            for l in logits:
+            # -- Let argmax label represent its tag -- #
+            predictions = torch.argmax(F.log_softmax(outputs.logits, dim=-1), dim=-1)
+            # -- Convert tensor value into numpy value for indexing -- #
+            predictions = predictions.detach().cpu().numpy()
+            # print("---Predictions---\n", predictions)
+            
+
+            for l in predictions:
                 pred_label = []
                 for idx in l:
                     pred_label.append(id2label[idx])
                 pred_labels.append(pred_label)
 
+
         assert len(pred_labels) == len(all_ori_tokens) == len(all_ori_labels)
-        print(len(pred_labels))
-        with open(os.path.join(args.output_dir, "token_labels_.txt"), "w", encoding="utf-8") as f:
-            for ori_tokens, ori_labels,prel in zip(all_ori_tokens, all_ori_labels, pred_labels):
-                for ot,ol,pl in zip(ori_tokens, ori_labels, prel):
+
+        print(f"\n --- Length of prediction labels: {len(pred_labels)} --- \n")
+
+        with open(os.path.join(str(args.output_dir)+"/inference", "test_labels.txt"), "w", encoding="utf-8") as f:
+            for _, (ori_tokens, ori_labels, prel) in enumerate(zip(all_ori_tokens, all_ori_labels, pred_labels)):
+                # mismatch of the inference --- assign tag on special token
+                for ot, ol, pl in zip(ori_tokens, ori_labels, prel):
+                    # print("--- ot, ol, pl ---\n")
+                    # print(ot, ol, pl)
                     if ot in ["[CLS]", "[SEP]"]:
                         continue
                     else:
-                        f.write(f"{ot} {ol} {pl}\n")
+                        f.write(f"{ot}\t{ol}\t{pl}\n")
+
                 f.write("\n")
 
 
