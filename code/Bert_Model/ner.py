@@ -165,6 +165,7 @@ def match_dim_tokenizer_model(tokenizer, model, device):
 
 
 def main():
+
     parser = argparse.ArgumentParser()
 
     ## Required parameters
@@ -182,6 +183,7 @@ def main():
     parser.add_argument("--cache_dir", default="", type=str,
                         help="Where do you want to store the pre-trained models downloaded from s3")
     
+
     parser.add_argument("--max_seq_length", default=256, type=int)
     parser.add_argument("--do_train", default=False, type=boolean_string)
     parser.add_argument("--do_eval", default=False, type=boolean_string)
@@ -204,10 +206,10 @@ def main():
     parser.add_argument("--logging_steps", default=500, type=int)
     parser.add_argument("--clean", default=False, type=boolean_string, help="clean the output dir")
 
+
     parser.add_argument("--need_birnn", default=False, type=boolean_string)
     parser.add_argument("--rnn_dim", default=128, type=int)
 
-    
 
     args = parser.parse_args()
 
@@ -232,7 +234,7 @@ def main():
     #     os.makedirs(tmp_dir)
     # args.output_dir = tmp_dir
     if args.clean and args.do_train:
-        # logger.info("清理")
+        logger.info("每次跑train会把上次的结果清除（test不清除）")
         if os.path.exists(args.output_dir):
             def del_file(path):
                 ls = os.listdir(path)
@@ -253,8 +255,7 @@ def main():
     
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
+    
 
     if not os.path.exists(os.path.join(args.output_dir, "eval")):
         os.makedirs(os.path.join(args.output_dir, "eval"))
@@ -276,14 +277,13 @@ def main():
     
     id2label = {value:key for key,value in label2id.items()} 
 
-    # Prepare optimizer and schedule (linear warmup and decay)
-
-# ---【更改！】 --- #
 
 
+    # ----------- Training Phase ----------- #
 
     if args.do_train:
 
+        # use pytorch built model -- not effective (didn't fine-tuned on NER tasks)
         """
         tokenizer = BertTokenizer.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, 
                     do_lower_case=args.do_lower_case)
@@ -291,9 +291,9 @@ def main():
                 num_labels=num_labels)
         model = BERT_BiLSTM_CRF.from_pretrained(args.model_name_or_path, config=config, 
                 need_birnn=args.need_birnn, rnn_dim=args.rnn_dim)
-        
         """
-        # set random seed
+        # set random seed -- meaningless in fine-tune Bert model
+        """
         def set_seed(seed):
             random.seed(seed)
             np.random.seed(seed)
@@ -303,7 +303,9 @@ def main():
         # Use set seed
         # seed = 42
         # set_seed(seed)
-
+        """
+        
+        # use huggingface model, which is (pre) fine-tuned on Medical Entities with NER tasks
         tokenizer = AutoTokenizer.from_pretrained("Clinical-AI-Apollo/Medical-NER",
                     truncation=True, 
                     padding=True, 
@@ -334,26 +336,26 @@ def main():
         model = AutoModelForTokenClassification.from_pretrained("Clinical-AI-Apollo/Medical-NER", \
                                                                 config = config, \
                                                                 ignore_mismatched_sizes = True)
-
+        
+        # ----- fix bug with unmatched the dimension of hidden layer ----- #
+        match_dim_tokenizer_model(tokenizer, model, device)
         """
         model.to(device)
         # 获取分词器的词汇表大小
         vocab_size = len(tokenizer)
         print(f"Vocabulary size: {vocab_size}")
-
         # 获取模型的嵌入层大小
         embedding_size = model.get_input_embeddings().weight.size(0)
         print(f"Embedding size: {embedding_size}")
-
         # 确保词汇表大小与嵌入层大小一致
         assert vocab_size == embedding_size, "Vocabulary size and embedding size do not match"
         """
 
-        match_dim_tokenizer_model(tokenizer, model, device)
-
-
         if n_gpu > 1: #【使用多个gpu并行训练！】
             model = torch.nn.DataParallel(model)
+        
+
+        # ----- Data & Optimizer prepare ----- #
 
         train_examples, train_features, train_data = get_Dataset(args, processor, tokenizer, mode="train")
         train_sampler = RandomSampler(train_data)
@@ -361,11 +363,9 @@ def main():
 
         match_dim_tokenizer_model(tokenizer, model, device)
 
-
         if args.do_eval:
             eval_examples, eval_features, eval_data = get_Dataset(args, processor, tokenizer, mode="eval")
             match_dim_tokenizer_model(tokenizer, model, device)
-      
         if args.max_steps > 0:
             t_total = args.max_steps
             args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
@@ -377,6 +377,7 @@ def main():
             {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
             {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
             ]
+        
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
@@ -385,14 +386,11 @@ def main():
         )
 
 
-        # Train!
+        # --- Train --- #
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_data))
         logger.info("  Num Epochs = %d", args.num_train_epochs)
         logger.info("  Total optimization steps = %d", t_total)
-
-        
-
 
         model.train()
         global_step = 0
@@ -402,7 +400,6 @@ def main():
             model.train()
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 batch = tuple(t.to(device) for t in batch)
-                
                 input_ids, input_mask, segment_ids, label_ids = batch
                 outputs = model(input_ids, labels=label_ids)
                 # segment_ids, input_mask
@@ -427,25 +424,29 @@ def main():
                         logging_loss = tr_loss
             
             if args.do_eval:
-
                 all_ori_tokens_eval = [f.ori_tokens for f in eval_features]
                 overall, by_type = evaluate(args, eval_data, model, id2label, all_ori_tokens_eval)
                 
 
-
                 # add eval result to tensorboard
                 f1_score = overall["f1-score"]
-                ###writer.add_scalar("Eval/precision", overall.prec, ep)
-                ###writer.add_scalar("Eval/recall", overall.rec, ep)
-                ###writer.add_scalar("Eval/f1_score", overall.fscore, ep)
+                ### writer.add_scalar("Eval/precision", overall.prec, ep)
+                ### writer.add_scalar("Eval/recall", overall.rec, ep)
+                ### writer.add_scalar("Eval/f1_score", overall.fscore, ep)
 
                 # save the best performs model
                 if f1_score > best_f1:
-                    logger.info(f"----------the best f1 is {f1_score}---------")
+                    logger.info(f"\n----------the best f1 is ---------\n{f1_score}")
                     best_f1 = f1_score
+
+                    # --- save in disk --- #
                     model_to_save = model.module if hasattr(model, 'module') else model  # Take care of distributed/parallel training
                     model_to_save.save_pretrained(args.output_dir, save_config=True) # 把模型保存到指定文件夹
                     tokenizer.save_pretrained(args.output_dir)
+
+                    # --- save in huggingface --- #
+                    model.push_to_hub("JerrySiRi/SWN_Biomedical_NER_Bert", tokenizer, save_method = "merged_16bit", token = "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")
+                    tokenizer.push_to_hub("JerrySiRi/SWN_Biomedical_NER_Bert", token = "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")
 
                     # Good practice: save your training arguments together with the trained model
                     torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
@@ -458,9 +459,10 @@ def main():
         # model_to_save.save_pretrained(args.output_dir)
         # tokenizer.save_pretrained(args.output_dir)
 
-        # TODO：Good practice: save your training arguments together with the trained model
-        # torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
 
+
+
+    # ----------- Testing Phase ----------- #
 
     if args.do_test:
         # model = BertForTokenClassification.from_pretrained(args.output_dir)
@@ -472,9 +474,24 @@ def main():
 
         label_map = {i : label for i, label in enumerate(label_list)}
 
-        tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
+        # --- Method 1: load model from disk --- #
+
+        """
+        tokenizer = AutoTokenizer.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert")
         model = AutoModelForTokenClassification.from_pretrained(args.output_dir)
         model.to(device)
+        """
+        
+
+        # ---Method 2: load model from huggingface --- #
+        tokenizer = AutoTokenizer.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert",
+                    truncation=True, 
+                    padding=True, 
+                    is_split_into_words=True, 
+                    return_tensors="pt")
+        model = AutoModelForTokenClassification.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert", \
+                                                                config = config, \
+                                                                ignore_mismatched_sizes = True)
 
         test_examples, test_features, test_data = get_Dataset(args, processor, tokenizer, mode="test")
 
@@ -503,7 +520,6 @@ def main():
             # logits = logits.detach().cpu().numpy()
 
             for l in logits:
-
                 pred_label = []
                 for idx in l:
                     pred_label.append(id2label[idx])
@@ -519,6 +535,8 @@ def main():
                     else:
                         f.write(f"{ot} {ol} {pl}\n")
                 f.write("\n")
+
+
 
 if __name__ == "__main__":
     main()

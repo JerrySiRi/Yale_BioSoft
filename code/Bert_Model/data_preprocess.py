@@ -3,8 +3,6 @@ import json
 import pandas
 
 
-
-
 def convert_files_to_txt(folder_path, output_file, pattern):
 
     files = sorted(os.listdir(folder_path))
