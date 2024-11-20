@@ -40,7 +40,7 @@ def classification_report(tags_true: list, tags_pred: list, mode="lenient", sche
     cur_matching_tag_pred = TNE
     for t, p in zip(tags_true, tags_pred):
         ## get the total ground truth number, will be used for recall calculation
-        print("Current tag", t)
+        print("Predict tag", p)
         if re.match("^(B)", t):
             truth[re.sub("(B)", "", t)] += 1
             cur_matching_tag = re.sub("(B)", "", t)
@@ -71,7 +71,7 @@ def classification_report(tags_true: list, tags_pred: list, mode="lenient", sche
                 start_matching = re.sub("(B)", "", t)
             elif p == t and re.match("^(I)", t) and start_matching in t:
                 pass
-            elif t != "I-"+start_matching and p != "I"+start_matching and start_matching != TNE:
+            elif t != "I"+start_matching and p != "I"+start_matching and start_matching != TNE:
                 matched[start_matching] += 1
                 start_matching = TNE
             else: #! matching failed
@@ -88,7 +88,7 @@ def classification_report(tags_true: list, tags_pred: list, mode="lenient", sche
     for ue in unique_entities:
         metrics[ue][f'precision'] = matched[ue]/predict[ue] if predict[ue] > 0 else 0
         metrics[ue][f'recall'] = matched[ue]/truth[ue] if truth[ue] > 0 else 0
-        metrics[ue][f'f1-score'] = (2*metrics[ue]['precision']*metrics[ue]['recall'])/(metrics[ue]['precision']+metrics[ue]['recall']) if (metrics[ue]['precision']+metrics[ue]['recall'] > 0) else 0
+        metrics[ue][f'f1-score'] = (2 * metrics[ue]['precision'] * metrics[ue]['recall'])/(metrics[ue]['precision'] + metrics[ue]['recall']) if (metrics[ue]['precision'] + metrics[ue]['recall'] > 0) else 0
         if verbose:
             print(f"tag: {ue} \t precision:{metrics[ue]['precision']} \t recall:{metrics[ue]['recall']} \t f1-score:{metrics[ue]['f1-score']}")
     return metrics
@@ -96,3 +96,4 @@ def classification_report(tags_true: list, tags_pred: list, mode="lenient", sche
 
 if __name__ == "__main__":
     pass
+

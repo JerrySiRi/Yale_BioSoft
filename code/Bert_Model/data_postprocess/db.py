@@ -1,7 +1,6 @@
 import os
 import json
 import sqlite3
-from llama_infer import *
 from dotenv import load_dotenv
 load_dotenv()
 

@@ -1,5 +1,44 @@
 Train:
-python ner.py --do_train True --do_eval True --do_test False --max_seq_length 256 --train_file ../../datasets/preprocessed_data/BIO_train.txt --eval_file ../../datasets/preprocessed_data/BIO_dev.txt --test_file ../../datasets/preprocessed_data/BIO_test.txt --train_batch_size 4 --eval_batch_size 4 --num_train_epochs 15 --do_lower_case --logging_steps 200 --need_birnn True --rnn_dim 256 --clean True --output_dir ./output --push_hf False
+python ner.py 
+--do_train True 
+--do_eval True 
+--do_test False 
+--max_seq_length 512 
+--train_file ../../../datasets/preprocessed_data/BIO_train.txt 
+--eval_file ../../../datasets/preprocessed_data/BIO_dev.txt 
+--test_file ../../../datasets/preprocessed_data/BIO_test.txt 
+--train_batch_size 4 
+--eval_batch_size 4 
+--num_train_epochs 20 
+--do_lower_case 
+--logging_steps 200 
+--need_birnn True 
+--rnn_dim 256 
+--clean True 
+--output_dir ../output 
+--push_hf True
+
+
 
 Test:
-python ner.py --do_train False --do_eval False --do_test True --max_seq_length 256 --train_file ../../datasets/preprocessed_data/BIO_train.txt --eval_file ../../datasets/preprocessed_data/BIO_dev.txt --test_file ../../datasets/preprocessed_data/BIO_test.txt --train_batch_size 4 --eval_batch_size 4 --num_train_epochs 10 --do_lower_case --logging_steps 200 --need_birnn True --rnn_dim 256 --clean False --output_dir ./output
+python ner.py 
+--do_train False 
+--do_eval False 
+--do_test True
+ --max_seq_length 512 
+ --train_file ../../../datasets/preprocessed_data/BIO_train.txt 
+ --eval_file ../../../datasets/preprocessed_data/BIO_dev.txt 
+ --test_file ../../../datasets/preprocessed_data/BIO_test.txt 
+ --train_batch_size 4 
+ --eval_batch_size 4 
+ --num_train_epochs 10 
+ --do_lower_case 
+ --logging_steps 200 
+ --need_birnn True 
+ --rnn_dim 256 
+ --clean False 
+ --output_dir ../output 
+ --action extract
+ --each_year_sample_size [**]
+ --start_year 2023
+ --end_year 2023

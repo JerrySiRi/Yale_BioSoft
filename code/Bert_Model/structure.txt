@@ -1,0 +1,32 @@
+.
+├── data_postprocess
+│   ├── db.py
+│   ├── llama_infer.py
+│   └── notebook.py
+├── data_preprocess
+│   └── data_preprocess.py
+├── Instruction_Bert.txt
+├── model_code
+│   ├── clue_process.py
+│   ├── conlleval.py
+│   ├── models.py
+│   ├── ner.py
+│   ├── __pycache__
+│   └── utils.py
+├── output
+│   ├── eval
+│   ├── inference
+│   ├── label2id.pkl
+│   ├── label_list.pkl
+│   └── model
+├── __pycache__
+│   ├── conlleval.cpython-311.pyc
+│   ├── conlleval.cpython-312.pyc
+│   ├── conlleval.cpython-39.pyc
+│   ├── utils.cpython-311.pyc
+│   ├── utils.cpython-312.pyc
+│   └── utils.cpython-39.pyc
+├── readme.md
+└── structure.txt
+
+10 directories, 20 files

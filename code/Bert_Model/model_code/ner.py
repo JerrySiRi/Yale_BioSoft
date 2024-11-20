@@ -1,5 +1,4 @@
 from __future__ import absolute_import, division, print_function
-
 import argparse
 import logging
 import os
@@ -35,7 +34,7 @@ sys.path.append(PYTHONPATH)
 
 logger = logging.getLogger(__name__)
 
-# 【【CUDA Debug】】 
+
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 
@@ -67,14 +66,13 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
 
 
     for b_i, (input_ids, input_mask, segment_ids, label_ids) in enumerate(tqdm(dataloader, desc="Evaluating")):
-        
         input_ids = input_ids.to(args.device)
         input_mask = input_mask.to(args.device)
         segment_ids = segment_ids.to(args.device)
         label_ids = label_ids.to(args.device)
 
         with torch.no_grad():
-            outputs = model(input_ids)
+            outputs = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids, labels=label_ids)
             logits = outputs.logits
             predictions = torch.argmax(logits, dim=-1)
 
@@ -97,12 +95,18 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
     print("--- Pred Labels --- \n")
     print(pred_labels)
 
+    plain_ori_labels = list()
+    plain_pred_labels = list()
+    for ori, pred in zip(ori_labels, pred_labels):
+        plain_ori_labels.extend(ori)
+        plain_pred_labels.extend(pred)
+
 
     print("\n --- Lenient --- \n")
-    lenient_metrics = classification_report(tags_true=ori_labels, tags_pred=pred_labels, mode="lenient") # for lenient match
+    lenient_metrics = classification_report(tags_true=plain_ori_labels, tags_pred=plain_pred_labels, mode="lenient") # for lenient match
     print(lenient_metrics)
     print("\n --- Strict --- \n")
-    strict_metrics = classification_report(tags_true=ori_labels, tags_pred=pred_labels, mode="strict") # for strict match
+    strict_metrics = classification_report(tags_true=plain_ori_labels, tags_pred=plain_pred_labels, mode="strict") # for strict match
     print(strict_metrics)
 
     # eval the model 
@@ -113,13 +117,12 @@ def evaluate(args, data, model, id2label, all_ori_tokens):
     ### overall, by_type = conlleval.metrics(counts)    
     ### return overall, by_type
 
-    print("&"*10, dict(lenient_metrics["default"]).keys)
-    return dict(lenient_metrics["default"]), list()
+    print("&"*10, dict(lenient_metrics['']).keys)
+    return dict(lenient_metrics['']), list()
 
 
 
 def match_dim_tokenizer_model(tokenizer, model, device):
-        
         # tokenizer的词汇表大小
         vocab_size = len(tokenizer)
         # 获取当前的词嵌入层
@@ -149,7 +152,11 @@ def match_dim_tokenizer_model(tokenizer, model, device):
 
 def main():
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='Extract software names from academic papers',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        # 帮助格式化器，它会显示命令行参数的默认值。
+    )
 
     ## Required parameters
     parser.add_argument("--train_file", default=None, type=str)
@@ -167,7 +174,7 @@ def main():
                         help="Where do you want to store the pre-trained models downloaded from s3")
     
 
-    parser.add_argument("--max_seq_length", default=256, type=int)
+    parser.add_argument("--max_seq_length", default=512, type=int)
     parser.add_argument("--do_train", default=False, type=boolean_string)
     parser.add_argument("--do_eval", default=False, type=boolean_string)
     parser.add_argument("--do_test", default=False, type=boolean_string)
@@ -194,6 +201,18 @@ def main():
     parser.add_argument("--need_birnn", default=False, type=boolean_string)
     parser.add_argument("--rnn_dim", default=128, type=int)
 
+    
+    # --- test时使用 --- #
+    parser.add_argument('--action', type=str, help='The action to perform: demo, extract', choices=['demo', 'extract'])
+    # 可选参数，使用--之后才给，也可以不给
+    parser.add_argument('--each_year_sample_size', type=int, default=10, help='The number of samples to extract')
+    parser.add_argument('--pmid_filter', type=str, default='1=1', help='Other specific filter instrction')
+    # 永真式，不需要就没用，需要再改
+    parser.add_argument('--start_year', type=str, default='2009', help='The start year of papers to extract')
+    parser.add_argument('--end_year', type=str, default='2023', help='The end year of papers to extract')
+    parser.add_argument('--shots_number', type=int, default=16, help='In-context shots. Choice: 4, 8, 16')
+    
+
 
     args = parser.parse_args()
 
@@ -219,7 +238,7 @@ def main():
     #     os.makedirs(tmp_dir)
     # args.output_dir = tmp_dir
     if args.clean and args.do_train:
-        logger.info("每次跑train会把上次的结果清除（test不清除）")
+        logger.info("clean = True,每次跑train会把存储的model清除")
         if os.path.exists(args.output_dir):
             def del_file(path):
                 ls = os.listdir(path)
@@ -267,19 +286,8 @@ def main():
     # ----------- Training Phase ----------- #
 
     if args.do_train:
-
-        # use pytorch built model -- not effective (didn't fine-tuned on NER tasks)
-        """
-        tokenizer = BertTokenizer.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, 
-                    do_lower_case=args.do_lower_case)
-        config = BertConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path, 
-                num_labels=num_labels)
-        model = BERT_BiLSTM_CRF.from_pretrained(args.model_name_or_path, config=config, 
-                need_birnn=args.need_birnn, rnn_dim=args.rnn_dim)
-        """
-        
         # use huggingface model, which is (pre) fine-tuned on Medical Entities with NER tasks
-        tokenizer = AutoTokenizer.from_pretrained("Clinical-AI-Apollo/Medical-NER",
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-base",
                     truncation=True, 
                     padding=True, 
                     is_split_into_words=True, 
@@ -287,7 +295,7 @@ def main():
 
         # preassigned hyper-parameter
         config = AutoConfig.from_pretrained(
-            "Clinical-AI-Apollo/Medical-NER", 
+            "microsoft/deberta-v3-base", 
             # hidden_size=768,       
             # num_attention_heads=12, 
             # num_hidden_layers=12,   
@@ -306,7 +314,7 @@ def main():
         )
 
         # Use predefined parameters 
-        model = AutoModelForTokenClassification.from_pretrained("Clinical-AI-Apollo/Medical-NER", \
+        model = AutoModelForTokenClassification.from_pretrained("microsoft/deberta-v3-base", \
                                                                 config = config, \
                                                                 ignore_mismatched_sizes = True)
         
@@ -364,7 +372,7 @@ def main():
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, label_ids = batch
-                outputs = model(input_ids, labels=label_ids)
+                outputs = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids, labels=label_ids)
                 # segment_ids, input_mask
                 loss = outputs.loss
 
@@ -391,8 +399,19 @@ def main():
                 overall, by_type = evaluate(args, eval_data, model, id2label, all_ori_tokens_eval)
                 
 
-                # add eval result to tensorboard
+                # add eval result to tensorboard/txt
                 f1_score = overall["f1-score"]
+                with open(os.path.join(str(args.output_dir)+"/train", "training_performance.txt"), "a", encoding="utf-8") as f:
+                        p = overall["precision"]
+                        r = overall["recall"]
+                        f1 = overall["f1-score"]
+                        f.write(f"""
+                                Batch {ep} Lenient Performace:
+                                \tprecision: {p}
+                                \trecall: {r}
+                                \tf1-score: {f1}\n""")
+                        f.write("\n")
+
                 ### writer.add_scalar("Eval/precision", overall.prec, ep)
                 ### writer.add_scalar("Eval/recall", overall.rec, ep)
                 ### writer.add_scalar("Eval/f1_score", overall.fscore, ep)
@@ -437,36 +456,15 @@ def main():
                 return False
             else:
                 return True
-            """
-            # 检查 input_ids 是否有非法值
-            print(input_ids.max(), input_ids.min())
-            # 对于分类问题，检查 labels 是否超出标签范围
-            print(label_ids.max(), label_ids.min())
-            # 检查输入数据的形状
-            print(input_ids.shape)  # 应该是 (batch_size, sequence_length)
-            # 确保分词器和模型一致
-            assert tokenizer.vocab_size == model.config.vocab_size, "词汇表大小不匹配！"
-            """
         
 
-        # model = BertForTokenClassification.from_pretrained(args.output_dir)
-        # model.to(device)
-        # tokenizer = BertTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
-        # args = torch.load(os.path.join(args.output_dir, 'training_args.bin'))
-        # model = BERT_BiLSTM_CRF.from_pretrained(args.output_dir, need_birnn=args.need_birnn, rnn_dim=args.rnn_dim)
-
-        # label_map = {i : label for i, label in enumerate(label_list)}
-
-
         # --- Method 1: load model from disk --- #
-
         """
         tokenizer = AutoTokenizer.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert")
         model = AutoModelForTokenClassification.from_pretrained(args.output_dir)
         model.to(device)
         """
         
-
         # ---Method 2: load model from huggingface --- #
         tokenizer = AutoTokenizer.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert",
                     truncation=True, 
@@ -475,16 +473,6 @@ def main():
                     return_tensors="pt")
         config = AutoConfig.from_pretrained(
             "JerrySiRi/SWN_Biomedical_NER_Bert", 
-            # hidden_size=768,       
-            # num_attention_heads=12, 
-            # num_hidden_layers=12,   
-            # intermediate_size=3072, 
-            # hidden_dropout_prob=0.1, # hidden layer dropout pro
-            # attention_probs_dropout_prob=0.1, # attention dropout pro
-            # max_position_embeddings=512,      
-            # type_vocab_size=2,        # 词汇类型嵌入大小 (用于 token 类型嵌入)
-            # initializer_range=0.02,   # 参数初始化范围
-            # layer_norm_eps=1e-12,     # 层归一化 epsilon 值
             output_attentions=False,  # 是否输出注意力权重
             output_hidden_states=False, # 是否输出隐藏层状态
             num_labels = 3,             
@@ -494,8 +482,15 @@ def main():
         model = AutoModelForTokenClassification.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert", \
                                                                 config = config, \
                                                                 ignore_mismatched_sizes = True)
-        
+    
+
         model.to(device)
+        
+        max_length = tokenizer.model_max_length
+        print(f"--- Tokenizer max length: {max_length} ---")
+
+        print(f"--- Model max length: {model.config.max_position_embeddings} ---")
+
         test_examples, test_features, test_data = get_Dataset(args, processor, tokenizer, mode="test")
 
         logger.info("***** Running test *****")
@@ -511,20 +506,12 @@ def main():
         pred_labels = []  
         # if model_tokenizer_test(input_ids, tokenizer, model) == False: 
 
-        # BUG BUG BUG：重新给他了一个新的embedding层，没有用原始fine-tune过的！！！    
+        # BUG BUG BUG：重新给他了一个新的embedding层，没有用原始fine-tune过的！！！ 
+           
         match_dim_tokenizer_model(tokenizer, model, device)
-
-        # ------ Inference Method 1: pipeline ----- #
-        """
-        from transformers import pipeline
-        pipe = pipeline("token-classification", model="JerrySiRi/SWN_Biomedical_NER_Bert", aggregation_strategy='simple')
-        result = pipe('45 year old woman diagnosed with CAD')
-        print("--- result ---")
-        print(result)
-        """
         
 
-        # ----- Inference Method 2: Use token_ids ----- #
+        # ----- Inference:  Use token_ids ----- #
         # CRF和Bert结合在一起了，此时model的输出结果是一个个的tensor，取max的就行
 
         for b_i, (input_ids, input_mask, segment_ids, label_ids) in enumerate(tqdm(test_dataloader, desc="Predicting")):
@@ -535,8 +522,8 @@ def main():
 
             # test_dataloader是batch化过的啦
             with torch.no_grad():
-                print(input_ids[0], segment_ids[0], input_mask[0])
-                outputs = model(input_ids, segment_ids, input_mask)
+                # print(input_ids[0], segment_ids[0], input_mask[0])
+                outputs = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids, labels=label_ids)
 
             # -- Let argmax label represent its tag -- #
             predictions = torch.argmax(F.log_softmax(outputs.logits, dim=-1), dim=-1)
@@ -544,7 +531,6 @@ def main():
             predictions = predictions.detach().cpu().numpy()
             # print("---Predictions---\n", predictions)
             
-
             for l in predictions:
                 pred_label = []
                 for idx in l:

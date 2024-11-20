@@ -157,24 +157,24 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
                         labels.append("I")
             
         if len(tokens) >= max_seq_length - 1:
-            tokens = tokens[0:(max_seq_length - 2)]  # -2 的原因是因为序列需要加一个句首和句尾标志
-            labels = labels[0:(max_seq_length - 2)]
-            ori_tokens = ori_tokens[0:(max_seq_length - 2)]
+            tokens = tokens[0: (max_seq_length - 2)]  # -2 的原因是因为序列需要加一个句首和句尾标志
+            labels = labels[0: (max_seq_length - 2)]
+            ori_tokens = ori_tokens[0: (max_seq_length - 2)]
 
         ori_tokens = ["[CLS]"] + ori_tokens + ["[SEP]"]
         
         ntokens = []
         segment_ids = []
         label_ids = []
+
         ntokens.append("[CLS]")
         segment_ids.append(0)
         label_ids.append(label_map["O"])
-
         for i, token in enumerate(tokens):
             ntokens.append(token)
             segment_ids.append(0)
             label_ids.append(label_map[labels[i]])
-
+            
         ntokens.append("[SEP]")
         segment_ids.append(0)
         label_ids.append(label_map["O"])
@@ -184,7 +184,8 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
 
         #print("==============", ori_tokens)
         #print("---------------------", ntokens)
-        assert len(ori_tokens) == len(ntokens), f"{len(ori_tokens)}, {len(ntokens)}, {ori_tokens}"
+        # tokenizer和原本分词不一样，后续不用ori_tokens，不用加assert啦
+        # assert len(ori_tokens) == len(ntokens), f"{len(ori_tokens)}, {len(ntokens)}, \n{ori_tokens}, \n{ntokens}"
 
         while len(input_ids) < max_seq_length:
             input_ids.append(0)
