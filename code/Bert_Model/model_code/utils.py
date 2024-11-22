@@ -121,8 +121,15 @@ class NerProcessor(object):
 
 def convert_examples_to_features(args, examples, label_list, max_seq_length, tokenizer):
 
+    def chunk_long_text(examples, max_length):
+        examples_chunks = [examples[i:i + max_length] for i in range(0, len(examples), max_length)]
+        return examples_chunks
+
+
+
     label_map = {label : i for i, label in enumerate(label_list)}
     features = []
+
 
     for (ex_index, example) in tqdm(enumerate(examples), desc="convert examples"):
         # if ex_index % 10000 == 0:
@@ -130,92 +137,98 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
         
         textlist = example.text.split(" ")
         labellist = example.label.split(" ")
-        assert len(textlist) == len(labellist)
-        tokens = []
-        labels = []
-        ori_tokens = []
 
-        for i, word in enumerate(textlist):
-            if len(tokenizer.tokenize(word)) != 1:
-                tokenizer.add_tokens(word) 
+        # TODO：分成多个不超过max_length的chunks
+        textlist_chunks = chunk_long_text(textlist, max_seq_length)
+        labellist_chunks = chunk_long_text(labellist, max_seq_length)
 
-        for i, word in enumerate(textlist):
-            # 防止wordPiece情况出现，不过貌似不会
-            token = tokenizer.tokenize(word)
-            tokens.extend(token)
-            label_1 = labellist[i]
-            ori_tokens.append(word)
+        for cur_textlist, cur_labellist in zip(textlist_chunks, labellist_chunks):
+            assert len(cur_textlist) == len(cur_labellist)
+            tokens = []
+            labels = []
+            ori_tokens = []
 
-            # 单个字符不会出现wordPiece
-            for m in range(len(token)):
-                if m == 0:
-                    labels.append(label_1)
-                else:
-                    if label_1 == "O":
-                        labels.append("O")
+            for i, word in enumerate(cur_textlist):
+                if len(tokenizer.tokenize(word)) != 1:
+                    tokenizer.add_tokens(word) 
+
+            for i, word in enumerate(cur_textlist):
+                # 防止wordPiece情况出现，不过貌似不会
+                token = tokenizer.tokenize(word)
+                tokens.extend(token)
+                label_1 = cur_labellist[i]
+                ori_tokens.append(word)
+
+                # 单个字符不会出现wordPiece
+                for m in range(len(token)):
+                    if m == 0:
+                        labels.append(label_1)
                     else:
-                        labels.append("I")
+                        if label_1 == "O":
+                            labels.append("O")
+                        else:
+                            labels.append("I")
+                
+            if len(tokens) >= max_seq_length - 1:
+                tokens = tokens[0: (max_seq_length - 2)]  # -2 的原因是因为序列需要加一个句首和句尾标志
+                labels = labels[0: (max_seq_length - 2)]
+                ori_tokens = ori_tokens[0: (max_seq_length - 2)]
+
+            ori_tokens = ["[CLS]"] + ori_tokens + ["[SEP]"]
             
-        if len(tokens) >= max_seq_length - 1:
-            tokens = tokens[0: (max_seq_length - 2)]  # -2 的原因是因为序列需要加一个句首和句尾标志
-            labels = labels[0: (max_seq_length - 2)]
-            ori_tokens = ori_tokens[0: (max_seq_length - 2)]
+            ntokens = []
+            segment_ids = []
+            label_ids = []
 
-        ori_tokens = ["[CLS]"] + ori_tokens + ["[SEP]"]
-        
-        ntokens = []
-        segment_ids = []
-        label_ids = []
-
-        ntokens.append("[CLS]")
-        segment_ids.append(0)
-        label_ids.append(label_map["O"])
-        for i, token in enumerate(tokens):
-            ntokens.append(token)
+            ntokens.append("[CLS]")
             segment_ids.append(0)
-            label_ids.append(label_map[labels[i]])
+            label_ids.append(label_map["O"])
+            for i, token in enumerate(tokens):
+                ntokens.append(token)
+                segment_ids.append(0)
+                label_ids.append(label_map[labels[i]])
+                
+            ntokens.append("[SEP]")
+            segment_ids.append(0)
+            label_ids.append(label_map["O"])
+            input_ids = tokenizer.convert_tokens_to_ids(ntokens)   
             
-        ntokens.append("[SEP]")
-        segment_ids.append(0)
-        label_ids.append(label_map["O"])
-        input_ids = tokenizer.convert_tokens_to_ids(ntokens)   
-        
-        input_mask = [1] * len(input_ids)
+            input_mask = [1] * len(input_ids)
 
-        #print("==============", ori_tokens)
-        #print("---------------------", ntokens)
-        # tokenizer和原本分词不一样，后续不用ori_tokens，不用加assert啦
-        # assert len(ori_tokens) == len(ntokens), f"{len(ori_tokens)}, {len(ntokens)}, \n{ori_tokens}, \n{ntokens}"
+            #print("==============", ori_tokens)
+            #print("---------------------", ntokens)
+            # tokenizer和原本分词不一样，后续不用ori_tokens，不用加assert啦
+            # assert len(ori_tokens) == len(ntokens), f"{len(ori_tokens)}, {len(ntokens)}, \n{ori_tokens}, \n{ntokens}"
 
-        while len(input_ids) < max_seq_length:
-            input_ids.append(0)
-            input_mask.append(0)
-            segment_ids.append(0)
-            # we don't concerned about it!
-            label_ids.append(0)
-            ntokens.append("**NULL**")
+            while len(input_ids) < max_seq_length:
+                input_ids.append(0)
+                input_mask.append(0)
+                segment_ids.append(0)
+                # we don't concerned about it!
+                label_ids.append(0)
+                ntokens.append("**NULL**")
 
-        assert len(input_ids) == max_seq_length
-        assert len(input_mask) == max_seq_length
-        assert len(segment_ids) == max_seq_length
-        assert len(label_ids) == max_seq_length
+            assert len(input_ids) == max_seq_length
+            assert len(input_mask) == max_seq_length
+            assert len(segment_ids) == max_seq_length
+            assert len(label_ids) == max_seq_length
 
-        if ex_index < 5:
-            logger.info("*** Example ***")
-            logger.info("guid: %s" % (example.guid))
-            logger.info("tokens: %s" % " ".join(
-                [str(x) for x in ntokens]))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-            logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-            logger.info("label_ids: %s" % " ".join([str(x) for x in label_ids]))
+            if ex_index < 5:
+                logger.info("*** Example ***")
+                logger.info("guid: %s" % (example.guid))
+                logger.info("tokens: %s" % " ".join(
+                    [str(x) for x in ntokens]))
+                logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+                logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+                logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+                logger.info("label_ids: %s" % " ".join([str(x) for x in label_ids]))
 
-        features.append(
-                InputFeatures(input_ids=input_ids,
-                              input_mask=input_mask,
-                              segment_ids=segment_ids,
-                              label_id=label_ids,
-                              ori_tokens=ori_tokens))
+            features.append(
+                    InputFeatures(input_ids=input_ids,
+                                input_mask=input_mask,
+                                segment_ids=segment_ids,
+                                label_id=label_ids,
+                                ori_tokens=ori_tokens))
 
     return features
 
@@ -236,7 +249,6 @@ def get_Dataset(args, processor, tokenizer, mode="train"):
     features = convert_examples_to_features(
         args, examples, label_list, args.max_seq_length, tokenizer
     )
-
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
     all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)

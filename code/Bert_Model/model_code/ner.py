@@ -247,7 +247,6 @@ def main():
                     print(c_path)
                     if os.path.isdir(c_path):
                         del_file(c_path)
-                        os.rmdir(c_path)
                     else:
                         os.remove(c_path)
             try:
@@ -257,8 +256,8 @@ def main():
                 print('pleace remove the files of output dir and data.conf')
                 exit(-1)
     
-    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+    # if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
+        # raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     
 
     if not os.path.exists(os.path.join(args.output_dir, "eval")):
