@@ -119,6 +119,7 @@ class NerProcessor(object):
         return examples
 
 
+# 
 def convert_examples_to_features(args, examples, label_list, max_seq_length, tokenizer):
 
     # 长度是max_length的列表
@@ -127,7 +128,7 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
         return examples_chunks
 
     label_map = {label : i for i, label in enumerate(label_list)}
-    features = [] # 
+    features = [] 
     chunked_label_examples = []
 
     for (ex_index, example) in tqdm(enumerate(examples), desc="convert examples"):

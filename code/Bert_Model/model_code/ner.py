@@ -548,6 +548,7 @@ def main():
 
         print(f"\n --- Length of *chunked* prediction labels: {len(pred_labels)} --- \n")
 
+        # prel和ori_token没错位！正常解析就好！
         with open(os.path.join(str(args.output_dir)+"/inference", "test_labels.txt"), "w", encoding="utf-8") as f:
             for _, (ori_tokens, ori_labels, prel) in enumerate(zip(all_ori_tokens, all_ori_labels, pred_labels)):
                 # mismatch of the inference --- assign tag on special token

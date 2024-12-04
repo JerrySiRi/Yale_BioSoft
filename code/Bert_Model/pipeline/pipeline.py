@@ -1,3 +1,8 @@
+
+# TODO 1: 创建db
+# TODO 2：调用Bert的inference代码
+# TODO 3：后处理，上传huggingface
+
 #%% run demo
 # import openai
 import json
@@ -5,8 +10,8 @@ import time
 import os
 import sys
 import sqlite3
-import code.Bert_Model.data_postprocess.db as db
-from code.Bert_Model.data_postprocess.db import *
+import db as db
+from db import *
 import duckdb
 # DuckDB 是一个嵌入式数据库，类似于 SQLite，但更专注于数据分析工作负载。它能够高效地处理数据，并且支持 SQL 查询。
 import pysbd
@@ -20,9 +25,6 @@ from pprint import pprint
 
 from dotenv import load_dotenv
 from datasets import Dataset, DatasetDict
-
-
-
 
 
 
@@ -42,52 +44,17 @@ print('* loaded all libraries')
 
 
 
-#%% load openai client
-
-# 现在用的本地的llama3.1，只不过名字没改
-base_url = os.getenv("OPENAI_API_BASE_URL", None)
-
-if base_url is None or base_url == '':
-    client = OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
-    )
-    print('* loaded official openai client')
-else:
-    client = OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=base_url
-    )
-    print('* loaded custom openai client at %s' % base_url)
+#%% 
 
 
 
-
-
-TPL_PROMPT = """
-
-Title: {title}
-     
-Abstract: {abstract}
-"""
-
-# 这个会比annotator要好！
-SYSTEM_ROLE = "You are an experienced software developer, data scientist, and researcher in biomedical fields, skilled in developing software using various techniques and particularly well-versed in the names of software used in this domain."
-
-
-# --- 调用model，进行inference --- #
+# --- 调用model，进行单片文章的inference --- #
 def extract(system_role, prompt_template, paper, shots_number):
     '''
     Extract something from the abstract of a paper based on the given prompt template.
     '''
     # ----------------------- 读取设计好的guidelines ----------------- # 
-    guidelines = """"""
-    few_shots = """"""
-    with open("../../datasets/prompts/guidelines.txt", 'r', encoding='utf-8') as file_txt:
-        for line in file_txt:
-            guidelines += line
-    with open(f"../../datasets/prompts/few_shots_Llama31_{shots_number}.txt", 'r', encoding='utf-8') as file_txt:
-        for line in file_txt:
-            few_shots += line
+    
     try:
         # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
         # 传入的paper会给键值对
@@ -97,13 +64,7 @@ def extract(system_role, prompt_template, paper, shots_number):
 
         # 返回的是一个json对象，有"software"关键字
 
-        Prompt_all = f"""# You are given a title and an abstract of an academic publication. Your task is to identify and extract the names of software mentioned in the abstract. Software names are typically proper nouns and may include specific tools, platforms, or libraries used in research. Please list the software names you find in the publication in a JSON object using a key "software". If you are unable to identify any software names, please return an empty list of "software". When identifying software names, please consider the following exclusion criteria 
-                            Also, apply following \"Guidelines\" and refer following \"Gold Examples\" to help with accuracy \n"""\
-                            f"# Guidelines: {guidelines} \n"\
-                            f"# Gold Examples: {few_shots} \n"\
-                            f"# INPUT: {prompt} \n"\
-                            f"\n"\
-                            f"# OUTPUT: \n"
+        Prompt_all = ""
 
         completion = client.chat.completions.create(
             model = os.getenv("OPENAI_API_MODEL"),
@@ -137,7 +98,6 @@ def extract(system_role, prompt_template, paper, shots_number):
 # clean 参数决定了分割器是否在分割前对文本进行清理。
 # - True，分割器会移除一些不必要的空白符或修复常见的格式问题。
 # - False，分割器会按照原始文本进行分割。
-
 
 sent_segmenter = pysbd.Segmenter(language="en", clean=False)
 
