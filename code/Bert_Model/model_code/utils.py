@@ -102,7 +102,6 @@ class NerProcessor(object):
             else:
                 logger.info("loading error and return the default labels B,I,O")
                 labels = {"O", "B", "I"}
-        
         return labels 
 
     def get_examples(self, input_file):
@@ -119,7 +118,7 @@ class NerProcessor(object):
         return examples
 
 
-# 
+
 def convert_examples_to_features(args, examples, label_list, max_seq_length, tokenizer):
 
     # 长度是max_length的列表
@@ -243,12 +242,14 @@ def get_Dataset(args, processor, tokenizer, mode="train"):
     else:
         raise ValueError("mode must be one of train, eval, or test")
 
+    print(filepath)
     examples = processor.get_examples(filepath)
     label_list = args.label_list
 
     features, chunked_examples = convert_examples_to_features(
         args, examples, label_list, args.max_seq_length, tokenizer
     )
+    
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
     all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)

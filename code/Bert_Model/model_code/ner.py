@@ -14,9 +14,9 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 #from tensorboardX import SummaryWriter
-from utils import NerProcessor, convert_examples_to_features, get_Dataset
+from Bert_Model.model_code.utils import NerProcessor, convert_examples_to_features, get_Dataset
 # from models import BERT_BiLSTM_CRF
-import conlleval as conlleval
+import Bert_Model.model_code.conlleval as conlleval
 from transformers import (WEIGHTS_NAME, BertConfig, BertTokenizer)
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import AutoTokenizer, AutoModelForTokenClassification, \
@@ -133,24 +133,24 @@ def match_dim_tokenizer_model(tokenizer, model, device):
         if vocab_size != original_vocab_size:
             print(f"Adjusting embedding layer from size {original_vocab_size} to {vocab_size}")
             new_embeddings = torch.nn.Embedding(vocab_size, embedding_dim)
-        # 复制原有的词嵌入矩阵到新的词嵌入矩阵
-        if vocab_size < original_vocab_size: # tokenizer的词矩阵更小
-            with torch.no_grad():
-                new_embeddings.weight[:vocab_size, :] = original_embeddings.weight[:vocab_size, :]
-            model.set_input_embeddings(new_embeddings)
-        else:   # model的embedding层更小
-            with torch.no_grad():
-                new_embeddings.weight[:original_vocab_size, :] = original_embeddings.weight[:original_vocab_size, :]
-            model.set_input_embeddings(new_embeddings)
+            # 复制原有的词嵌入矩阵到新的词嵌入矩阵
+            if vocab_size < original_vocab_size: # tokenizer的词矩阵更小
+                with torch.no_grad():
+                    new_embeddings.weight[:vocab_size, :] = original_embeddings.weight[:vocab_size, :]
+                model.set_input_embeddings(new_embeddings)
+            else:   # model的embedding层更小
+                with torch.no_grad():
+                    new_embeddings.weight[:original_vocab_size, :] = original_embeddings.weight[:original_vocab_size, :]
+                model.set_input_embeddings(new_embeddings)
 
-        # 调整模型的词嵌入层
-        model.resize_token_embeddings(vocab_size)
-        model.to(device)
-        # tokenizer.to(device)
+            # 调整模型的词嵌入层
+            model.resize_token_embeddings(vocab_size)
+            model.to(device)
+            # tokenizer.to(device)
 
 
 
-def main():
+def main_1():
 
     parser = argparse.ArgumentParser(
         description='Extract software names from academic papers',
@@ -211,8 +211,6 @@ def main():
     parser.add_argument('--start_year', type=str, default='2009', help='The start year of papers to extract')
     parser.add_argument('--end_year', type=str, default='2023', help='The end year of papers to extract')
     parser.add_argument('--shots_number', type=int, default=16, help='In-context shots. Choice: 4, 8, 16')
-    
-
 
     args = parser.parse_args()
 
@@ -279,7 +277,6 @@ def main():
             pickle.dump(label2id, f)      
     
     id2label = {value:key for key,value in label2id.items()} 
-
 
 
     # ----------- Training Phase ----------- #
@@ -562,8 +559,115 @@ def main():
 
                 f.write("\n")
 
+def main_2(args, inference_file):
+
+    args.test_file = inference_file
+    if args.do_test:
+        def model_tokenizer_test(input_ids, tokenizer, model):
+            if (input_ids.max() > model.config.vocab_size) or \
+                (label_ids.max() > model.config.label2id) or \
+                (tokenizer.vocab_size != model.config.vocab_size):
+                print("Unmatched tokenizer and model embedding dimension")
+                return False
+            else:
+                return True
+        
+        tokenizer = AutoTokenizer.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert",
+                    truncation=True, 
+                    padding=True, 
+                    is_split_into_words=True, 
+                    return_tensors="pt")
+        config = AutoConfig.from_pretrained(
+            "JerrySiRi/SWN_Biomedical_NER_Bert", 
+            output_attentions=False,  # 是否输出注意力权重
+            output_hidden_states=False, # 是否输出隐藏层状态  
+            num_labels = 3, # 防止model输出的label超过0,1,2三个可能值        
+            id2label={0: 'O', 1: 'B', 2: 'I'},  
+            label2id={'O': 0, 'B': 1, 'I': 2}, 
+        )
+
+        model = AutoModelForTokenClassification.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert", \
+                                                                config = config, \
+                                                                ignore_mismatched_sizes = True)
+        device = torch.device("cpu")
+        model.to(device)
+        
+
+
+        max_length = tokenizer.model_max_length
+        print(f"--- Tokenizer max length: {max_length} ---")
+        print(f"--- Model max length: {model.config.max_position_embeddings} ---")
+
+        processor = NerProcessor()
+        label_list = processor.get_labels(args)
+        args.label_list = label_list
+
+        test_label_examples, test_features, test_data = get_Dataset(args, processor, tokenizer, mode="test")
+
+
+        logger.info("***** Running test *****")
+        logger.info(f" Num examples = {len(test_label_examples)}")
+        logger.info(f" Batch size = {args.eval_batch_size}")
+
+        all_ori_tokens = [f.ori_tokens for f in test_features]
+        all_ori_labels = test_label_examples
+
+        test_sampler = SequentialSampler(test_data)
+        test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
+        model.eval()
+
+        pred_labels = []  
+        # if model_tokenizer_test(input_ids, tokenizer, model) == False: 
+
+        # BUG BUG BUG：重新给他了一个新的embedding层，没有用原始fine-tune过的！！！ 
+        match_dim_tokenizer_model(tokenizer, model, device)
+        
+        for b_i, (input_ids, input_mask, segment_ids, label_ids) in enumerate(tqdm(test_dataloader, desc="Predicting")):
+            input_ids = input_ids.to(device)
+            input_mask = input_mask.to(device)
+            segment_ids = segment_ids.to(device)
+            label_ids = label_ids.to(device)
+
+            # test_dataloader是batch化过的啦
+            with torch.no_grad():
+                # print(input_ids[0], segment_ids[0], input_mask[0])
+                outputs = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids, labels=label_ids)
+
+            # -- Let argmax label represent its tag -- #
+            predictions = torch.argmax(F.log_softmax(outputs.logits, dim=-1), dim=-1)
+            # -- Convert tensor value into numpy value for indexing -- #
+            predictions = predictions.detach().cpu().numpy()
+            # print("---Predictions---\n", predictions)
+            
+            # BUG BUG BUG BUG BUG: tuple index out of range
+
+            id2label = {0: 'O', 1: 'B', 2: 'I'}
+
+            for l in predictions:
+                pred_label = []
+                for idx in l:
+                    pred_label.append(id2label[int(idx)])
+                pred_labels.append(pred_label)
+
+        assert len(pred_labels) == len(all_ori_tokens) == len(all_ori_labels),\
+            f"pred:{len(pred_labels)}, ori_token:{len(all_ori_tokens)}, ori_labels:{len(all_ori_labels)}"
+
+        print(f"\n --- Length of *chunked* prediction labels: {len(pred_labels)} --- \n")
+        # prel和ori_token没错位！正常解析就好！
+        with open(os.path.join(str(args.output_dir)+"/inference", "Pubmed_labels.txt"), "w", encoding="utf-8") as f:
+            for _, (ori_tokens, ori_labels, prel) in enumerate(zip(all_ori_tokens, all_ori_labels, pred_labels)):
+                # mismatch of the inference --- assign tag on special token
+                for ot, ol, pl in zip(ori_tokens, ori_labels, prel):
+                    # print("--- ot, ol, pl ---\n")
+                    # print(ot, ol, pl)
+                    if ot in ["[CLS]", "[SEP]"]:
+                        continue
+                    else:
+                        f.write(f"{ot}\t{ol}\t{pl}\n")
+
+                f.write("\n")
 
 
 if __name__ == "__main__":
-    main()
+    main_1()
     pass

@@ -6,10 +6,10 @@ load_dotenv()
 
 
 # get the path of the database
-def create_db(start_year, end_year, sample_size, shots_num):
+def create_db(start_year, end_year, sample_size, percent):
     global path_db
     path_db = os.getenv('OUTPUT_DATABASE', None)
-    path_db = path_db + f"_{start_year}_{end_year}_{sample_size}_{shots_num}" + ".db"
+    path_db = path_db + f"{start_year}_{end_year}_{sample_size}_{percent}" + ".db"
     if path_db is None:
         raise Exception('OUTPUT_DATABASE is not set in .env file')
 

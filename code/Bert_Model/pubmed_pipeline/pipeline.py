@@ -19,6 +19,7 @@ from tqdm import tqdm
 import pandas as pd
 from openai import OpenAI
 from pprint import pprint
+
 # 名字来源于 “pretty-print”。
 # 它用于以一种更加可读的方式格式化和输出数据结构，尤其是复杂的嵌套数据结构（如字典、列表、元组等）。
 # --- 复杂输出结构时可用！
@@ -41,55 +42,25 @@ EMAIL_FOLDER = os.getenv('EMAIL_FOLDER')
 sys.path.append(EMAIL_FOLDER)
 from Email_senting import send_email
 print('* loaded all libraries')
+from Bert_Model.model_code.ner import *
 
 
 
-#%% 
-
-
-
-# --- 调用model，进行单片文章的inference --- #
-def extract(system_role, prompt_template, paper, shots_number):
+# --- 调用model，进行是BIO tag的inference_file进行处理。返回一个txt文件 --- #
+def extract(inference_file):
+    
     '''
     Extract something from the abstract of a paper based on the given prompt template.
     '''
-    # ----------------------- 读取设计好的guidelines ----------------- # 
-    
+
     try:
-        # 传入的是TPL_prompt, 里边有format函数要用的{title}和{abstract}。
-        # 传入的paper会给键值对
-        # 【改】把原来的prompt加到了abstract里边
-        paper["abstract"] = paper["title"] + " " + paper["abstract"]
-        prompt = prompt_template.format(**paper)
-
-        # 返回的是一个json对象，有"software"关键字
-
-        Prompt_all = ""
-
-        completion = client.chat.completions.create(
-            model = os.getenv("OPENAI_API_MODEL"),
-            messages=[
-                {"role": "system", "content": system_role},
-                {"role": "user", "content": Prompt_all}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0,
-        )
-
-        result = json.loads(completion.choices[0].message.content)
-
-        return result
-    
+        main_2(args, inference_file)
     except Exception as e:
         print(f'! error: {e}')
         # print full stack
         import traceback
         traceback.print_exc()
-
         return None
-
-
-
 
 # create a segmenter for sentence splitting
 # 创建了一个【句子分割器（segmenter）】，用于将文本分割成独立的句子。
@@ -146,35 +117,24 @@ def get_contexts(entities, paper):
 
 
 
-# --- 单篇文章 抽取 & 保存到数据库 --- #
-def extract_and_save_to_db(paper, flag_force_update=False, shots_number = 16):
+# --- 依据给定的预处理BIO文件，Bert做抽取 --- #
+
+def extract_and_save_to_db(inference_file):
     '''
     Extract software names from the given paper and save the result to the database.
-    
     The paper should be a dictionary with the following keys
     - pmid: the PMID of the paper
     - title: the title of the paper
     - abstract: the abstract of the paper
-
     '''
-    # check if the software names are already extracted
-    result = db.load_paper_software_names(paper['pmid'])
-
-    # 如果这篇文章（pmid）已经有软件名了（之前提取过），flag=False时啥都不做，True时删掉重新提取这篇文章的软件名
-    if result is not None:
-        if flag_force_update:
-            # delete the existing software names
-            db.delete_paper_software_names(paper['pmid'])
-            # then extract again
-        else:
-            # already extracted
-            print(f'* found software for paper {paper["pmid"]}')
-            return
 
     # not found, extract the software names
     # extract using the openai model
-    tmp = extract(SYSTEM_ROLE, TPL_PROMPT, paper, shots_number)
+    extract(inference_file) # 生成一个抽取的BIO文件
 
+    exit()
+    # --- 后处理 --- # 
+    # --- TODO: 以下是对单文件进行的处理，需要修改成对一群文件 --- #
     if tmp is None:
         # no software names found or error
         result = {'software': []}
@@ -209,50 +169,6 @@ def extract_and_save_to_db(paper, flag_force_update=False, shots_number = 16):
 
 
 
-def demo_extract():
-    '''
-    Run a demo to extract software names from the sample paper.
-    '''
-    # 问题：漏掉了title的抽取，应该把title也放到abstract里边
-    sample_paper_initial = {
-        "pmid": "35613942",
-        "title": "A Systematic Approach to Configuring MetaMap for Optimal Performance",
-        "abstract": """Background: MetaMap is a valuable tool for processing biomedical texts to identify concepts. Although MetaMap is highly configurative, configuration decisions are not straightforward.
-
-    Objective: To develop a systematic, data-driven methodology for configuring MetaMap for optimal performance.
-
-    Methods: MetaMap, the word2vec model, and the phrase model were used to build a pipeline. For unsupervised training, the phrase and word2vec models used abstracts related to clinical decision support as input. During testing, MetaMap was configured with the default option, one behavior option, and two behavior options. For each configuration, cosine and soft cosine similarity scores between identified entities and gold-standard terms were computed for 40 annotated abstracts (422 sentences). The similarity scores were used to calculate and compare the overall percentages of exact matches, similar matches, and missing gold-standard terms among the abstracts for each configuration. The results were manually spot-checked. The precision, recall, and F-measure (β =1) were calculated.
-
-    Results: The percentages of exact matches and missing gold-standard terms were 0.6-0.79 and 0.09-0.3 for one behavior option, and 0.56-0.8 and 0.09-0.3 for two behavior options, respectively. The percentages of exact matches and missing terms for soft cosine similarity scores exceeded those for cosine similarity scores. The average precision, recall, and F-measure were 0.59, 0.82, and 0.68 for exact matches, and 1.00, 0.53, and 0.69 for missing terms, respectively.
-
-    Conclusion: We demonstrated a systematic approach that provides objective and accurate evidence guiding MetaMap configurations for optimizing performance. Combining objective evidence and the current practice of using principles, experience, and intuitions outperforms a single strategy in MetaMap configurations. Our methodology, reference codes, measurements, results, and workflow are valuable references for optimizing and configuring MetaMap.
-    """
-    }
-    sample_paper_gold = {
-        "pmid": "000000",
-        "title":"i - ADHoRe 2.0 : an improved tool to detect degenerated genomic homology using genomic profiles .",
-        "abstract":
-    """ 
-SUMMARY : i - ADHoRe is a software tool that combines gene content and gene order information of homologous genomic segments into profiles to detect highly degenerated homology relations within and between genomes .
-The new version offers , besides a significant increase in performance , several optimizations to the algorithm , most importantly to the profile alignment routine .
-As a result , the annotations of multiple genomes , or parts thereof , can be fed simultaneously into the program , after which it will report all regions of homology , both within and between genomes .
-AVAILABILITY : The i - ADHoRe 2.0 package contains the C + + source code for the main program as well as various Perl scripts and a fully documented Perl API to facilitate post - processing .
-The software runs on any Linux - or - UNIX based platform .
-The package is freely available for academic users and can be downloaded from http : / / bioinformatics.psb.ugent.be / 
-    """
-    }
-    ret = extract(SYSTEM_ROLE, TPL_PROMPT, sample_paper_initial)
-    print("* extracted software names:", ret)
-
-    if ret is None:
-        pass
-    else:
-        entities_with_context = get_contexts(ret['software'], sample_paper_initial)
-        print('* entities with context:')
-        pprint(entities_with_context)
-
-
-
 # --- 抽取结果上传huggingface --- # 
 def upload_hugging_face(data, start_year, end_year, each_year_sample_size):
 
@@ -275,14 +191,14 @@ def upload_hugging_face(data, start_year, end_year, each_year_sample_size):
 
 
 # --- 总抽取函数 --- # 
-
 def extract_and_save_samples(
+    output_file="../../../datasets/PubMed",
     sample_size=10, 
     pmid_filter='1=1',
     start_year = 2010,
     end_year = 2023,
     main_run = True,
-    shots_number = 16
+    percent = 1
 ):
     '''
     Extract software names from all papers in the database.
@@ -306,7 +222,6 @@ def extract_and_save_samples(
     print('* loaded data from %s' % path_data)
 
     # ---------- 筛选逻辑，筛选生成dataframe --------- # 
-    
     # sample_size = 每年的LIMI
     # 按照pubdate设置分区，再在分区中显示sample_size
     if main_run == True:
@@ -357,33 +272,51 @@ def extract_and_save_samples(
     data = []
     total = df.shape[0]
     one_third_point = total//3
-    count = 0
+    all_abstract = [] # 所有文件的title + abstract，用于bert做inference，index一一对应
+    all_other_info = [] # 用户huggingface上传，index一一对应
     for i, row in tqdm(df.iterrows(), total=total):
-        count += 1
         # create a new paper for extraction
-        cur_paper = {
-            'pmid': row['pmid'],
-            'title': row['title'],
-            'pubdate': row["pubdate"],
-            'abstract': row['abstract'],
-            "journal": row["journal"],
-            "mesh_terms": row["mesh_terms"],
-            "authors": row["authors"]
-        }
-        
-        current = extract_and_save_to_db(cur_paper, shots_number)
-        data.append(current)
-        if count >= one_third_point and count < one_third_point + 1:
-            send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_shots:{shots_number} in each year", \
-                       "Inference reached first one_third_point!")
-        elif count >= 2*one_third_point and count < 2*one_third_point + 1:
-            send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_shots:{shots_number} in each year", \
-                       "Inference reached second one_third_point!")
+        all_abstract.append(row["title"].strip() + " " + row["abstract"].strip())
+        all_other_info.append((row['pmid'], row["pubdate"], \
+                               row["journal"], row["mesh_terms"],\
+                               row["authors"]))
+    
+    # --- 预处理，处理成txt文件 --- #
+    taged_test_name = output_file + f"/Pubmed_{START_YEAR}_{END_YEAR}_{SAMPLE_SIZE}.txt"
+    with open(taged_test_name, "w", encoding="utf-8") as taged: # Use writelines to write list 
+        for item in all_abstract:
+            cur_list = item.strip().split(" ")
+            for cur_mention in cur_list:
+                # BUG：必须要把O加上去，之后的逻辑是如果len!=2直接不处理
+                if cur_mention[-1] in [",", ".", "!", "?"]:
+                    taged.write(cur_mention[0:-1] + "\t" + 'O' + "\n")
+                    taged.write(cur_mention[-1] + "\t" + 'O'+ "\n")
+                else:
+                    taged.write(cur_mention + "\t" + 'O' + "\n")
 
-        # in case sending too many requests
-        # pause a few seconds every 100 requests
-        # 使用openai api的时，为了防止请求速度过快而设置的sleep
-        if i % 100 == 0: time.sleep(1)
+            taged.write("\n") 
+
+    # 预处理后的目标文件为taged_test_name，空格分隔。返回每个abstract的BIO tag【完成后处理】
+    # 对应的信息在all_other_info对应下标元素中，pmid等信息
+ 
+    extracted_information = extract_and_save_to_db(taged_test_name)
+
+
+
+
+    # --- data是为了huggingface构建，count是为了发送邮件 --- #
+    data.append(current)
+    if count >= one_third_point and count < one_third_point + 1:
+        send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_shots:{shots_number} in each year", \
+                    "Inference reached first one_third_point!")
+    elif count >= 2*one_third_point and count < 2*one_third_point + 1:
+        send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_shots:{shots_number} in each year", \
+                    "Inference reached second one_third_point!")
+
+    # in case sending too many requests
+    # pause a few seconds every 100 requests
+    # 使用openai api的时，为了防止请求速度过快而设置的sleep
+    if i % 100 == 0: time.sleep(1)
 
     upload_hugging_face(data, start_year=start_year, end_year=end_year, each_year_sample_size=sample_size)
     send_email(f"Llama 3.1 _ Software name Inference Progress: {start_year}_{end_year}_{sample_size}_in each year ", \
@@ -395,22 +328,68 @@ def extract_and_save_samples(
 #%% main function
 
 if __name__ == '__main__':
-    import argparse
 
+    import argparse
     parser = argparse.ArgumentParser(
         description='Extract software names from academic papers',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         # 帮助格式化器，它会显示命令行参数的默认值。
     )
-    # 位置参数，必须要给
-    parser.add_argument('action', type=str, help='The action to perform: demo, extract', choices=['demo', 'extract'])
+    def boolean_string(s):
+        if s not in {'False', 'True'}:
+            raise ValueError('Not a valid boolean string')
+        return s == 'True'
+
+    ## Test Required parameters
+    parser.add_argument("--train_file", default=None, type=str)
+    parser.add_argument("--eval_file", default=None, type=str)
+    parser.add_argument("--test_file", default=None, type=str)
+    parser.add_argument("--model_name_or_path", default=None, type=str)
+    parser.add_argument("--output_dir", default="../output", type=str)
+
+    ## Test other parameters
+    parser.add_argument("--config_name", default="", type=str,
+                        help="Pretrained config name or path if not the same as model_name")
+    parser.add_argument("--tokenizer_name", default="", type=str,
+                        help="Pretrained tokenizer name or path if not the same as model_name")
+    parser.add_argument("--cache_dir", default="", type=str,
+                        help="Where do you want to store the pre-trained models downloaded from s3")
+    parser.add_argument("--max_seq_length", default=512, type=int)
+    parser.add_argument("--do_train", default=False, type=boolean_string)
+    parser.add_argument("--do_eval", default=False, type=boolean_string)
+    parser.add_argument("--do_test", default=False, type=boolean_string)
+    parser.add_argument("--train_batch_size", default=8, type=int)
+    parser.add_argument("--eval_batch_size", default=8, type=int)
+    parser.add_argument("--learning_rate", default=2e-5, type=float)
+    parser.add_argument("--num_train_epochs", default=10, type=float)
+    parser.add_argument("--warmup_proprotion", default=0.1, type=float)
+    parser.add_argument("--use_weight", default=1, type=int)
+    parser.add_argument("--local_rank", type=int, default=-1)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fp16", default=False)
+    parser.add_argument("--loss_scale", type=float, default=0)
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
+    parser.add_argument("--warmup_steps", default=0, type=int)
+    parser.add_argument("--adam_epsilon", default=1e-8, type=float)
+    parser.add_argument("--max_steps", default=-1, type=int)
+    parser.add_argument("--do_lower_case", action='store_true')
+    parser.add_argument("--logging_steps", default=500, type=int)
+    parser.add_argument("--clean", default=False, type=boolean_string, help="clean the output dir")
+    parser.add_argument("--push_hf", default=False, type=boolean_string, help="clean the output dir")
+    parser.add_argument("--need_birnn", default=False, type=boolean_string)
+    parser.add_argument("--rnn_dim", default=128, type=int)
+
+    
+    # --- Test with db creation & filter --- #
+    # 位置参数（不加两个--），必须要给
+    parser.add_argument('--action', type=str, help='The action to perform: demo, extract', choices=['demo', 'extract'])
     # 可选参数，使用--之后才给，也可以不给
     parser.add_argument('--each_year_sample_size', type=int, default=10, help='The number of samples to extract')
     parser.add_argument('--pmid_filter', type=str, default='1=1', help='Other specific filter instrction')
     # 永真式，不需要就没用，需要再改
     parser.add_argument('--start_year', type=str, default='2009', help='The start year of papers to extract')
     parser.add_argument('--end_year', type=str, default='2023', help='The end year of papers to extract')
-    parser.add_argument('--shots_number', type=int, default=16, help='In-context shots. Choice: 4, 8, 16')
+    parser.add_argument('--percent', type=float, default=1, help='Used X percentage from the resignated data')
     
 
     args = parser.parse_args()
@@ -418,19 +397,18 @@ if __name__ == '__main__':
     START_YEAR = args.start_year
     END_YEAR = args.end_year
     SAMPLE_SIZE = args.each_year_sample_size
-    SHOTS_NUM = args.shots_number
-    # 创建有年份的数据库名
-    create_db(START_YEAR, END_YEAR, SAMPLE_SIZE, SHOTS_NUM)
+    PERCENT = args.percent
 
-    if args.action == 'demo':
-        demo_extract()
-    elif args.action == 'extract':
+    # 创建有年份的数据库名
+    create_db(START_YEAR, END_YEAR, SAMPLE_SIZE, PERCENT)
+
+    if args.action == 'extract':
         extract_and_save_samples(
             sample_size = args.each_year_sample_size,
             pmid_filter = args.pmid_filter,
             start_year = args.start_year,
             end_year = args.end_year,
-            shots_number = args.shots_number
+            percent = args.percent
         )
     else:
         print('Unknown action: %s' % args.action)
