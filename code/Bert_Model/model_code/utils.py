@@ -121,20 +121,19 @@ class NerProcessor(object):
 
 def convert_examples_to_features(args, examples, label_list, max_seq_length, tokenizer):
 
+    # 长度是max_length的列表
     def chunk_long_text(examples, max_length):
-        examples_chunks = [examples[i:i + max_length] for i in range(0, len(examples), max_length)]
+        examples_chunks = [examples[i: i + max_length] for i in range(0, len(examples), max_length)]
         return examples_chunks
 
-
-
     label_map = {label : i for i, label in enumerate(label_list)}
-    features = []
-
+    features = [] # 
+    chunked_label_examples = []
 
     for (ex_index, example) in tqdm(enumerate(examples), desc="convert examples"):
         # if ex_index % 10000 == 0:
         #     logger.info("Writing example %d of %d" % (ex_index, len(examples)))
-        
+
         textlist = example.text.split(" ")
         labellist = example.label.split(" ")
 
@@ -142,7 +141,11 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
         textlist_chunks = chunk_long_text(textlist, max_seq_length)
         labellist_chunks = chunk_long_text(labellist, max_seq_length)
 
+        for item in labellist_chunks:
+            chunked_label_examples.append(item)
+
         for cur_textlist, cur_labellist in zip(textlist_chunks, labellist_chunks):
+            # -- 对每一个子列表操作 -- #
             assert len(cur_textlist) == len(cur_labellist)
             tokens = []
             labels = []
@@ -195,11 +198,6 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
             
             input_mask = [1] * len(input_ids)
 
-            #print("==============", ori_tokens)
-            #print("---------------------", ntokens)
-            # tokenizer和原本分词不一样，后续不用ori_tokens，不用加assert啦
-            # assert len(ori_tokens) == len(ntokens), f"{len(ori_tokens)}, {len(ntokens)}, \n{ori_tokens}, \n{ntokens}"
-
             while len(input_ids) < max_seq_length:
                 input_ids.append(0)
                 input_mask.append(0)
@@ -223,14 +221,15 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
                 logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
                 logger.info("label_ids: %s" % " ".join([str(x) for x in label_ids]))
 
+            # 一个列表的feature
             features.append(
                     InputFeatures(input_ids=input_ids,
                                 input_mask=input_mask,
                                 segment_ids=segment_ids,
                                 label_id=label_ids,
                                 ori_tokens=ori_tokens))
-
-    return features
+ 
+    return features, chunked_label_examples
 
 
 def get_Dataset(args, processor, tokenizer, mode="train"):
@@ -246,7 +245,7 @@ def get_Dataset(args, processor, tokenizer, mode="train"):
     examples = processor.get_examples(filepath)
     label_list = args.label_list
 
-    features = convert_examples_to_features(
+    features, chunked_examples = convert_examples_to_features(
         args, examples, label_list, args.max_seq_length, tokenizer
     )
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
@@ -256,4 +255,5 @@ def get_Dataset(args, processor, tokenizer, mode="train"):
 
     data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
 
-    return examples, features, data
+
+    return chunked_examples, features, data

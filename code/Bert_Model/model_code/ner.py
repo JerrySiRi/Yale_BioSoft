@@ -238,7 +238,7 @@ def main():
     #     os.makedirs(tmp_dir)
     # args.output_dir = tmp_dir
     if args.clean and args.do_train:
-        logger.info("clean = True,每次跑train会把存储的model清除")
+        logger.info("clean = True, clean the saved model")
         if os.path.exists(args.output_dir):
             def del_file(path):
                 ls = os.listdir(path)
@@ -319,7 +319,6 @@ def main():
         
         # ----- fix bug with unmatched dimension between tokenizer and model ----- #
         match_dim_tokenizer_model(tokenizer, model, device)
-
 
         if n_gpu > 1: #【使用多个gpu并行训练！】
             model = torch.nn.DataParallel(model)
@@ -487,20 +486,28 @@ def main():
         
         max_length = tokenizer.model_max_length
         print(f"--- Tokenizer max length: {max_length} ---")
-
         print(f"--- Model max length: {model.config.max_position_embeddings} ---")
 
-        test_examples, test_features, test_data = get_Dataset(args, processor, tokenizer, mode="test")
+        # 前两个是列表的列表，test_data是值
+        test_label_examples, test_features, test_data = get_Dataset(args, processor, tokenizer, mode="test")
 
         logger.info("***** Running test *****")
-        logger.info(f" Num examples = {len(test_examples)}")
+        logger.info(f" Num examples = {len(test_label_examples)}")
         logger.info(f" Batch size = {args.eval_batch_size}")
 
+        # assert len(pred_labels) == len(all_ori_tokens) == len(all_ori_labels)。第三个比前两个少了3个
+
         all_ori_tokens = [f.ori_tokens for f in test_features]
-        all_ori_labels = [e.label.split(" ") for e in test_examples]
+        all_ori_labels = test_label_examples
+
+        # print(all_ori_tokens)
+        # print("\n")
+        # print(all_ori_labels)
+
         test_sampler = SequentialSampler(test_data)
         test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
         model.eval()
+
 
         pred_labels = []  
         # if model_tokenizer_test(input_ids, tokenizer, model) == False: 
@@ -536,10 +543,10 @@ def main():
                     pred_label.append(id2label[idx])
                 pred_labels.append(pred_label)
 
+        assert len(pred_labels) == len(all_ori_tokens) == len(all_ori_labels),\
+            f"pred:{len(pred_labels)}, ori_token:{len(all_ori_tokens)}, ori_labels:{len(all_ori_labels)}"
 
-        assert len(pred_labels) == len(all_ori_tokens) == len(all_ori_labels)
-
-        print(f"\n --- Length of prediction labels: {len(pred_labels)} --- \n")
+        print(f"\n --- Length of *chunked* prediction labels: {len(pred_labels)} --- \n")
 
         with open(os.path.join(str(args.output_dir)+"/inference", "test_labels.txt"), "w", encoding="utf-8") as f:
             for _, (ori_tokens, ori_labels, prel) in enumerate(zip(all_ori_tokens, all_ori_labels, pred_labels)):
