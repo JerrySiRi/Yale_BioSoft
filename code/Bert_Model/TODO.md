@@ -2,7 +2,7 @@
 
 # 2. [必须做]-解决model改embedding层无法上传的问题
 
-# 3. 创建db, 如何让Bert进行inference
+# 3. ok-创建db, 如何让Bert进行inference
 
 BUG：test数据集就可以，pubmed数据集就全部是B ->-> 数据集处理的问题？数据集来源的问题？
 
@@ -15,3 +15,8 @@ embedding层无法直接匹配上的问题？（感觉不像，test的时候也�
 # 4. 后处理，上传到huggingface
 
 # 5. batch操作做inference，现在是线性的（用tokenizer来做batch）
+
+# TODO: 速度太慢了，看看能不能batch（convert的时候没有用gpu，多线程来做tokenize？）
+
+
+# TODO：可以先让LLaMA来做inference，这样不用batch先把2023年跑出来

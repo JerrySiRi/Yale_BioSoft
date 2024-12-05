@@ -32,8 +32,8 @@ sys.path.append(PYTHONPATH)
 logger = logging.getLogger(__name__)
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-from model_code.utils import NerProcessor, convert_examples_to_features, get_Dataset
-import model_code.conlleval as conlleval
+from Bert_Model.model_code.utils import NerProcessor, convert_examples_to_features, get_Dataset
+import Bert_Model.model_code.conlleval as conlleval
 
 
 # --- set the random seed for repeat --- #
