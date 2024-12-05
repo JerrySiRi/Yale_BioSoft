@@ -1,13 +1,16 @@
 # 1. ok-解决chunks的问题
 
-# 2. []-解决model改embedding层无法上传的问题
+# 2. [必须做]-解决model改embedding层无法上传的问题
 
 # 3. 创建db, 如何让Bert进行inference
 
-1. dataframe->{pmid:[[chunked_abstract], 其他属性]}
-2. Bert处理需要转成每个字一行的tag。
-3. 多个abstract放到一个txt文件中。
-4. 
+BUG：test数据集就可以，pubmed数据集就全部是B ->-> 数据集处理的问题？数据集来源的问题？
+
+embedding层无法直接匹配上的问题？（感觉不像，test的时候也没匹配上，仍然可以继续做）
+
+实验1：用现在的代码，尝试test data -> 发现出错 -> 自己的代码问题
+
+实验2：用原来的代码，尝试pubmed data -> 运行没有错 -> 自己代码的问题
 
 # 4. 后处理，上传到huggingface
 

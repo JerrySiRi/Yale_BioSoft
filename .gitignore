@@ -171,4 +171,7 @@ code/Bert_Model/output/*
 
 datasets/clamp-api-demo-1.0.0-SNAPSHOT.jar
 code/Llama 3.1_8B_standard/database
+code/Bert_Model/pubmed_pipelin/database
 
+code/Bert_Model/pubmed_pipeline/database/software_names2023_2023_100_0.1.db
+code/Bert_Model/pubmed_pipeline/database/software_names2023_2023_10000_0.5.db

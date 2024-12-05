@@ -144,16 +144,19 @@ def convert_examples_to_features(args, examples, label_list, max_seq_length, tok
         for item in labellist_chunks:
             chunked_label_examples.append(item)
 
+        # PubMed: 此时labellist全是'O', 并无实际作用
         for cur_textlist, cur_labellist in zip(textlist_chunks, labellist_chunks):
             # -- 对每一个子列表操作 -- #
             assert len(cur_textlist) == len(cur_labellist)
-            tokens = []
+            tokens = [] # 每一个chunk中，tokenizer做tokenize后的结果
             labels = []
             ori_tokens = []
 
+            # --- 把所有出现的word加到tokenizer的词表中 --- #
             for i, word in enumerate(cur_textlist):
                 if len(tokenizer.tokenize(word)) != 1:
                     tokenizer.add_tokens(word) 
+
 
             for i, word in enumerate(cur_textlist):
                 # 防止wordPiece情况出现，不过貌似不会

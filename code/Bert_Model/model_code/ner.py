@@ -14,9 +14,7 @@ from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 #from tensorboardX import SummaryWriter
-from Bert_Model.model_code.utils import NerProcessor, convert_examples_to_features, get_Dataset
-# from models import BERT_BiLSTM_CRF
-import Bert_Model.model_code.conlleval as conlleval
+
 from transformers import (WEIGHTS_NAME, BertConfig, BertTokenizer)
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import AutoTokenizer, AutoModelForTokenClassification, \
@@ -31,11 +29,11 @@ load_dotenv()
 PYTHONPATH = os.getenv('PYTHONPATH')
 print(PYTHONPATH)
 sys.path.append(PYTHONPATH)
-
 logger = logging.getLogger(__name__)
-
-
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+
+from model_code.utils import NerProcessor, convert_examples_to_features, get_Dataset
+import model_code.conlleval as conlleval
 
 
 # --- set the random seed for repeat --- #
@@ -150,69 +148,71 @@ def match_dim_tokenizer_model(tokenizer, model, device):
 
 
 
-def main_1():
-
-    parser = argparse.ArgumentParser(
-        description='Extract software names from academic papers',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        # 帮助格式化器，它会显示命令行参数的默认值。
-    )
-
-    ## Required parameters
-    parser.add_argument("--train_file", default=None, type=str)
-    parser.add_argument("--eval_file", default=None, type=str)
-    parser.add_argument("--test_file", default=None, type=str)
-    parser.add_argument("--model_name_or_path", default=None, type=str)
-    parser.add_argument("--output_dir", default="../output", type=str)
-
-    ## other parameters
-    parser.add_argument("--config_name", default="", type=str,
-                        help="Pretrained config name or path if not the same as model_name")
-    parser.add_argument("--tokenizer_name", default="", type=str,
-                        help="Pretrained tokenizer name or path if not the same as model_name")
-    parser.add_argument("--cache_dir", default="", type=str,
-                        help="Where do you want to store the pre-trained models downloaded from s3")
+def main(args=None, infernece_file=None, pipeline=False):
     
+    if pipeline == False:
+        parser = argparse.ArgumentParser(
+            description='Extract software names from academic papers',
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            # 帮助格式化器，它会显示命令行参数的默认值。
+        )
 
-    parser.add_argument("--max_seq_length", default=512, type=int)
-    parser.add_argument("--do_train", default=False, type=boolean_string)
-    parser.add_argument("--do_eval", default=False, type=boolean_string)
-    parser.add_argument("--do_test", default=False, type=boolean_string)
-    parser.add_argument("--train_batch_size", default=8, type=int)
-    parser.add_argument("--eval_batch_size", default=8, type=int)
-    parser.add_argument("--learning_rate", default=2e-5, type=float)
-    parser.add_argument("--num_train_epochs", default=10, type=float)
-    parser.add_argument("--warmup_proprotion", default=0.1, type=float)
-    parser.add_argument("--use_weight", default=1, type=int)
-    parser.add_argument("--local_rank", type=int, default=-1)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--fp16", default=False)
-    parser.add_argument("--loss_scale", type=float, default=0)
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
-    parser.add_argument("--warmup_steps", default=0, type=int)
-    parser.add_argument("--adam_epsilon", default=1e-8, type=float)
-    parser.add_argument("--max_steps", default=-1, type=int)
-    parser.add_argument("--do_lower_case", action='store_true')
-    parser.add_argument("--logging_steps", default=500, type=int)
-    parser.add_argument("--clean", default=False, type=boolean_string, help="clean the output dir")
-    parser.add_argument("--push_hf", default=False, type=boolean_string, help="clean the output dir")
+        ## Required parameters
+        parser.add_argument("--train_file", default=None, type=str)
+        parser.add_argument("--eval_file", default=None, type=str)
+        parser.add_argument("--test_file", default=None, type=str)
+        parser.add_argument("--model_name_or_path", default=None, type=str)
+        parser.add_argument("--output_dir", default="../output", type=str)
+
+        ## other parameters
+        parser.add_argument("--config_name", default="", type=str,
+                            help="Pretrained config name or path if not the same as model_name")
+        parser.add_argument("--tokenizer_name", default="", type=str,
+                            help="Pretrained tokenizer name or path if not the same as model_name")
+        parser.add_argument("--cache_dir", default="", type=str,
+                            help="Where do you want to store the pre-trained models downloaded from s3")
+        
+
+        parser.add_argument("--max_seq_length", default=512, type=int)
+        parser.add_argument("--do_train", default=False, type=boolean_string)
+        parser.add_argument("--do_eval", default=False, type=boolean_string)
+        parser.add_argument("--do_test", default=False, type=boolean_string)
+        parser.add_argument("--train_batch_size", default=8, type=int)
+        parser.add_argument("--eval_batch_size", default=8, type=int)
+        parser.add_argument("--learning_rate", default=2e-5, type=float)
+        parser.add_argument("--num_train_epochs", default=10, type=float)
+        parser.add_argument("--warmup_proprotion", default=0.1, type=float)
+        parser.add_argument("--use_weight", default=1, type=int)
+        parser.add_argument("--local_rank", type=int, default=-1)
+        parser.add_argument("--seed", type=int, default=42)
+        parser.add_argument("--fp16", default=False)
+        parser.add_argument("--loss_scale", type=float, default=0)
+        parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
+        parser.add_argument("--warmup_steps", default=0, type=int)
+        parser.add_argument("--adam_epsilon", default=1e-8, type=float)
+        parser.add_argument("--max_steps", default=-1, type=int)
+        parser.add_argument("--do_lower_case", action='store_true')
+        parser.add_argument("--logging_steps", default=500, type=int)
+        parser.add_argument("--clean", default=False, type=boolean_string, help="clean the output dir")
+        parser.add_argument("--push_hf", default=False, type=boolean_string, help="clean the output dir")
 
 
-    parser.add_argument("--need_birnn", default=False, type=boolean_string)
-    parser.add_argument("--rnn_dim", default=128, type=int)
+        parser.add_argument("--need_birnn", default=False, type=boolean_string)
+        parser.add_argument("--rnn_dim", default=128, type=int)
 
-    
-    # --- test时使用 --- #
-    parser.add_argument('--action', type=str, help='The action to perform: demo, extract', choices=['demo', 'extract'])
-    # 可选参数，使用--之后才给，也可以不给
-    parser.add_argument('--each_year_sample_size', type=int, default=10, help='The number of samples to extract')
-    parser.add_argument('--pmid_filter', type=str, default='1=1', help='Other specific filter instrction')
-    # 永真式，不需要就没用，需要再改
-    parser.add_argument('--start_year', type=str, default='2009', help='The start year of papers to extract')
-    parser.add_argument('--end_year', type=str, default='2023', help='The end year of papers to extract')
-    parser.add_argument('--shots_number', type=int, default=16, help='In-context shots. Choice: 4, 8, 16')
-
-    args = parser.parse_args()
+        
+        # --- test时使用 --- #
+        parser.add_argument('--action', type=str, help='The action to perform: demo, extract', choices=['demo', 'extract'])
+        # 可选参数，使用--之后才给，也可以不给
+        parser.add_argument('--each_year_sample_size', type=int, default=10, help='The number of samples to extract')
+        parser.add_argument('--pmid_filter', type=str, default='1=1', help='Other specific filter instrction')
+        # 永真式，不需要就没用，需要再改
+        parser.add_argument('--start_year', type=str, default='2009', help='The start year of papers to extract')
+        parser.add_argument('--end_year', type=str, default='2023', help='The end year of papers to extract')
+        parser.add_argument('--percent', type=float, default=1, help='In-context shots. Choice: 4, 8, 16')
+        args = parser.parse_args()
+    else:
+        args = args
 
     device = torch.device("cuda")
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_
@@ -443,6 +443,11 @@ def main_1():
     # ----------- Testing Phase ----------- #
 
     if args.do_test:
+        # ../../../datasets/PubMed + f"/Pubmed_{START_YEAR}_{END_YEAR}_{SAMPLE_SIZE}.txt"
+        # args.test_file = "../../../datasets/PubMed/Pubmed_2023_2023_100.txt"
+        if pipeline == True:
+            args.test_file = infernece_file
+
         def model_tokenizer_test(input_ids, tokenizer, model):
             if (input_ids.max() > model.config.vocab_size) or \
                 (label_ids.max() > model.config.label2id) or \
@@ -451,16 +456,7 @@ def main_1():
                 return False
             else:
                 return True
-        
 
-        # --- Method 1: load model from disk --- #
-        """
-        tokenizer = AutoTokenizer.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert")
-        model = AutoModelForTokenClassification.from_pretrained(args.output_dir)
-        model.to(device)
-        """
-        
-        # ---Method 2: load model from huggingface --- #
         tokenizer = AutoTokenizer.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert",
                     truncation=True, 
                     padding=True, 
@@ -478,7 +474,6 @@ def main_1():
                                                                 config = config, \
                                                                 ignore_mismatched_sizes = True)
     
-
         model.to(device)
         
         max_length = tokenizer.model_max_length
@@ -497,10 +492,6 @@ def main_1():
         all_ori_tokens = [f.ori_tokens for f in test_features]
         all_ori_labels = test_label_examples
 
-        # print(all_ori_tokens)
-        # print("\n")
-        # print(all_ori_labels)
-
         test_sampler = SequentialSampler(test_data)
         test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
         model.eval()
@@ -510,7 +501,6 @@ def main_1():
         # if model_tokenizer_test(input_ids, tokenizer, model) == False: 
 
         # BUG BUG BUG：重新给他了一个新的embedding层，没有用原始fine-tune过的！！！ 
-           
         match_dim_tokenizer_model(tokenizer, model, device)
         
 
@@ -526,7 +516,7 @@ def main_1():
             # test_dataloader是batch化过的啦
             with torch.no_grad():
                 # print(input_ids[0], segment_ids[0], input_mask[0])
-                outputs = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids, labels=label_ids)
+                outputs = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids)
 
             # -- Let argmax label represent its tag -- #
             predictions = torch.argmax(F.log_softmax(outputs.logits, dim=-1), dim=-1)
@@ -546,7 +536,14 @@ def main_1():
         print(f"\n --- Length of *chunked* prediction labels: {len(pred_labels)} --- \n")
 
         # prel和ori_token没错位！正常解析就好！
-        with open(os.path.join(str(args.output_dir)+"/inference", "test_labels.txt"), "w", encoding="utf-8") as f:
+
+        target_file = ""
+        if pipeline == True:
+            target_file = "PubMed_labels.txt"
+        else:
+            target_file = "test_labels.txt"
+
+        with open(os.path.join(str(args.output_dir)+"/inference", target_file), "w", encoding="utf-8") as f:
             for _, (ori_tokens, ori_labels, prel) in enumerate(zip(all_ori_tokens, all_ori_labels, pred_labels)):
                 # mismatch of the inference --- assign tag on special token
                 for ot, ol, pl in zip(ori_tokens, ori_labels, prel):
@@ -556,118 +553,10 @@ def main_1():
                         continue
                     else:
                         f.write(f"{ot}\t{ol}\t{pl}\n")
-
                 f.write("\n")
 
-def main_2(args, inference_file):
-
-    args.test_file = inference_file
-    if args.do_test:
-        def model_tokenizer_test(input_ids, tokenizer, model):
-            if (input_ids.max() > model.config.vocab_size) or \
-                (label_ids.max() > model.config.label2id) or \
-                (tokenizer.vocab_size != model.config.vocab_size):
-                print("Unmatched tokenizer and model embedding dimension")
-                return False
-            else:
-                return True
-        
-        tokenizer = AutoTokenizer.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert",
-                    truncation=True, 
-                    padding=True, 
-                    is_split_into_words=True, 
-                    return_tensors="pt")
-        config = AutoConfig.from_pretrained(
-            "JerrySiRi/SWN_Biomedical_NER_Bert", 
-            output_attentions=False,  # 是否输出注意力权重
-            output_hidden_states=False, # 是否输出隐藏层状态  
-            num_labels = 3, # 防止model输出的label超过0,1,2三个可能值        
-            id2label={0: 'O', 1: 'B', 2: 'I'},  
-            label2id={'O': 0, 'B': 1, 'I': 2}, 
-        )
-
-        model = AutoModelForTokenClassification.from_pretrained("JerrySiRi/SWN_Biomedical_NER_Bert", \
-                                                                config = config, \
-                                                                ignore_mismatched_sizes = True)
-        device = torch.device("cpu")
-        model.to(device)
-        
-
-
-        max_length = tokenizer.model_max_length
-        print(f"--- Tokenizer max length: {max_length} ---")
-        print(f"--- Model max length: {model.config.max_position_embeddings} ---")
-
-        processor = NerProcessor()
-        label_list = processor.get_labels(args)
-        args.label_list = label_list
-
-        test_label_examples, test_features, test_data = get_Dataset(args, processor, tokenizer, mode="test")
-
-
-        logger.info("***** Running test *****")
-        logger.info(f" Num examples = {len(test_label_examples)}")
-        logger.info(f" Batch size = {args.eval_batch_size}")
-
-        all_ori_tokens = [f.ori_tokens for f in test_features]
-        all_ori_labels = test_label_examples
-
-        test_sampler = SequentialSampler(test_data)
-        test_dataloader = DataLoader(test_data, sampler=test_sampler, batch_size=args.eval_batch_size)
-        model.eval()
-
-        pred_labels = []  
-        # if model_tokenizer_test(input_ids, tokenizer, model) == False: 
-
-        # BUG BUG BUG：重新给他了一个新的embedding层，没有用原始fine-tune过的！！！ 
-        match_dim_tokenizer_model(tokenizer, model, device)
-        
-        for b_i, (input_ids, input_mask, segment_ids, label_ids) in enumerate(tqdm(test_dataloader, desc="Predicting")):
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-            segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
-
-            # test_dataloader是batch化过的啦
-            with torch.no_grad():
-                # print(input_ids[0], segment_ids[0], input_mask[0])
-                outputs = model(input_ids=input_ids, attention_mask=input_mask, token_type_ids=segment_ids, labels=label_ids)
-
-            # -- Let argmax label represent its tag -- #
-            predictions = torch.argmax(F.log_softmax(outputs.logits, dim=-1), dim=-1)
-            # -- Convert tensor value into numpy value for indexing -- #
-            predictions = predictions.detach().cpu().numpy()
-            # print("---Predictions---\n", predictions)
-            
-            # BUG BUG BUG BUG BUG: tuple index out of range
-
-            id2label = {0: 'O', 1: 'B', 2: 'I'}
-
-            for l in predictions:
-                pred_label = []
-                for idx in l:
-                    pred_label.append(id2label[int(idx)])
-                pred_labels.append(pred_label)
-
-        assert len(pred_labels) == len(all_ori_tokens) == len(all_ori_labels),\
-            f"pred:{len(pred_labels)}, ori_token:{len(all_ori_tokens)}, ori_labels:{len(all_ori_labels)}"
-
-        print(f"\n --- Length of *chunked* prediction labels: {len(pred_labels)} --- \n")
-        # prel和ori_token没错位！正常解析就好！
-        with open(os.path.join(str(args.output_dir)+"/inference", "Pubmed_labels.txt"), "w", encoding="utf-8") as f:
-            for _, (ori_tokens, ori_labels, prel) in enumerate(zip(all_ori_tokens, all_ori_labels, pred_labels)):
-                # mismatch of the inference --- assign tag on special token
-                for ot, ol, pl in zip(ori_tokens, ori_labels, prel):
-                    # print("--- ot, ol, pl ---\n")
-                    # print(ot, ol, pl)
-                    if ot in ["[CLS]", "[SEP]"]:
-                        continue
-                    else:
-                        f.write(f"{ot}\t{ol}\t{pl}\n")
-
-                f.write("\n")
 
 
 if __name__ == "__main__":
-    main_1()
+    main()
     pass

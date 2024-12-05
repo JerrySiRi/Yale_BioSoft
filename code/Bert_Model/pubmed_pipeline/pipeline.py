@@ -54,7 +54,7 @@ def extract(inference_file):
     '''
 
     try:
-        main_2(args, inference_file)
+        main(args, inference_file, pipeline=True)
     except Exception as e:
         print(f'! error: {e}')
         # print full stack
@@ -276,24 +276,26 @@ def extract_and_save_samples(
     all_other_info = [] # 用户huggingface上传，index一一对应
     for i, row in tqdm(df.iterrows(), total=total):
         # create a new paper for extraction
-        all_abstract.append(row["title"].strip() + " " + row["abstract"].strip())
+        all_abstract.append(row["title"].strip() + ". " + row["abstract"].strip())
         all_other_info.append((row['pmid'], row["pubdate"], \
                                row["journal"], row["mesh_terms"],\
                                row["authors"]))
     
     # --- 预处理，处理成txt文件 --- #
     taged_test_name = output_file + f"/Pubmed_{START_YEAR}_{END_YEAR}_{SAMPLE_SIZE}.txt"
+
     with open(taged_test_name, "w", encoding="utf-8") as taged: # Use writelines to write list 
         for item in all_abstract:
             cur_list = item.strip().split(" ")
             for cur_mention in cur_list:
                 # BUG：必须要把O加上去，之后的逻辑是如果len!=2直接不处理
+                if len(cur_mention) == 0:
+                    continue
                 if cur_mention[-1] in [",", ".", "!", "?"]:
                     taged.write(cur_mention[0:-1] + "\t" + 'O' + "\n")
                     taged.write(cur_mention[-1] + "\t" + 'O'+ "\n")
                 else:
                     taged.write(cur_mention + "\t" + 'O' + "\n")
-
             taged.write("\n") 
 
     # 预处理后的目标文件为taged_test_name，空格分隔。返回每个abstract的BIO tag【完成后处理】
